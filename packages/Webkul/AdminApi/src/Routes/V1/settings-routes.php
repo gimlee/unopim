@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Api\ExchangeRateController;
 use Illuminate\Support\Facades\Route;
 use Webkul\AdminApi\Http\Controllers\API\Settings\ChannelController;
 use Webkul\AdminApi\Http\Controllers\API\Settings\CurrencyController;
@@ -29,6 +30,9 @@ Route::group([
     });
 
     /** Currencies API Route Routes */
+    Route::get('exchange-rates', [ExchangeRateController::class, 'index'])
+        ->name('admin.api.exchange_rates.index');
+
     Route::controller(CurrencyController::class)->prefix('currencies')->group(function () {
         Route::get('', 'index')->name('admin.api.currencies.index');
         Route::get('{code}', 'get')->name('admin.api.currencies.get');

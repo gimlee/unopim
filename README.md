@@ -136,6 +136,8 @@ UnoPim is engineered for high-volume catalogues. Read [how UnoPim scales to hand
   <p><img src="https://raw.githubusercontent.com/unopim/temp-media/main/multi-channel-support.png" alt="Multi-Channel Support" width="720"></p>
 
 - **Multi-Currency**
+
+  CNY-based Frankfurter updates and conversion are described in [Exchange rates](docs/exchange-rates.md).
   Support for multiple currencies.
 
   <p><img src="https://raw.githubusercontent.com/unopim/temp-media/main/multi-currency-support.png" alt="Multi-Currency Support" width="720"></p>

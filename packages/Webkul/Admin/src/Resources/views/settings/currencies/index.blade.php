@@ -8,6 +8,10 @@
     <v-currencies>
         <x-admin::page-header :title="trans('admin::app.settings.currencies.index.title')">
             <x-slot:actions>
+                <a href="{{ route('admin.settings.exchange_rates.index') }}" class="secondary-button">
+                    Exchange Rates
+                </a>
+
                 <!-- Create currency Button -->
                 @if (bouncer()->hasPermission('settings.currencies.create'))
                     <button
@@ -33,6 +37,10 @@
         >
             <x-admin::page-header :title="trans('admin::app.settings.currencies.index.title')">
                 <x-slot:actions>
+                    <a href="{{ route('admin.settings.exchange_rates.index') }}" class="secondary-button">
+                        Exchange Rates
+                    </a>
+
                     <!-- Create currency Button -->
                     @if (bouncer()->hasPermission('settings.currencies.create'))
                         <button

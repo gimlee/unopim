@@ -73,10 +73,10 @@ class MediaFileController extends ApiController
 
             foreach ($attributeValue as $value) {
                 if ($value instanceof UploadedFile) {
-                    $filePath[] = $this->fileStorer->store(
-                        path: 'product'.DIRECTORY_SEPARATOR.$productId.DIRECTORY_SEPARATOR.$attribute,
+                    $filePath[] = str_replace('\\', '/', $this->fileStorer->store(
+                        path: 'product/'.$productId.'/'.$attribute,
                         file: $value
-                    );
+                    ));
                 }
             }
 

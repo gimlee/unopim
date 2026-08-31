@@ -1,4 +1,4 @@
-.env
+# Local setup is intentionally version-controlled for this project.
 .env.testing
 .env.hostbak.*
 tests/e2e-pw/dbg.mjs
@@ -44,7 +44,8 @@ test-results
 
 .cursor
 .github/skills
-docs
+/docs/*
+!/docs/exchange-rates.md
 graphify-out
 .mcp.json
 boost.json

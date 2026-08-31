@@ -7,6 +7,7 @@ use Exception;
 use Illuminate\Http\Response;
 use Illuminate\Routing\Controller as BaseController;
 use Illuminate\Support\Facades\Request;
+use Webkul\Core\ImageCache\ImageCache;
 
 class Controller extends BaseController
 {
@@ -49,21 +50,21 @@ class Controller extends BaseController
         abort_unless(file_exists($path), 404, 'Image not found.');
 
         try {
-            $image = image_manager()->read($path);
+            $imageCache = app(ImageCache::class)->make($path);
 
             if (is_object($templateConfig) && method_exists($templateConfig, 'applyFilter')) {
-                $image = $templateConfig->applyFilter($image);
+                $imageCache = $templateConfig->applyFilter($imageCache);
             } elseif (class_exists($templateConfig)) {
                 $filter = new $templateConfig;
 
                 if (method_exists($filter, 'applyFilter')) {
-                    $image = $filter->applyFilter($image);
+                    $imageCache = $filter->applyFilter($imageCache);
                 }
             } elseif ($templateConfig instanceof Closure) {
-                $image = $templateConfig($image);
+                $imageCache = $templateConfig($imageCache);
             }
 
-            $content = (string) $image->encodeByMediaType();
+            $content = (string) $imageCache->get((int) config('imagecache.lifetime', 43200));
         } catch (Exception) {
             abort(404, 'Unable to process image.');
         }

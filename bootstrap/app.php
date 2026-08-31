@@ -50,6 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 $schedule->command('unopim:category:index')->twiceDailyAt(0, 12, 1);
                 $schedule->command('unopim:completeness:recalculate', ['--all'])->dailyAt('02:00');
                 $schedule->command('unopim:dashboard:refresh')->everyTenMinutes();
+                $schedule->command('unopim:exchange-rates:refresh')->cron('0 */3 * * *');
                 $schedule->command('unopim:data-transfer:reap-stalled')->everyFiveMinutes();
             });
     })

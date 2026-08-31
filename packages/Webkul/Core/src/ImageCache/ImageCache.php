@@ -8,6 +8,7 @@ use Illuminate\Cache\Repository;
 use Illuminate\Cache\Repository as Cache;
 use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\Facades\Date;
+use Intervention\Image\Encoders\PngEncoder;
 use Intervention\Image\Exceptions\EncoderException;
 use Intervention\Image\ImageManager;
 use Intervention\Image\Interfaces\ImageInterface;
@@ -219,7 +220,7 @@ class ImageCache
         $arguments = $call['arguments'];
 
         if ($name === 'read' && ! ($this->image instanceof ImageInterface)) {
-            $this->image = call_user_func_array([$this->manager, 'read'], $arguments);
+            $this->image = $this->manager->decode($arguments[0] ?? null);
 
             return;
         }
@@ -269,7 +270,7 @@ class ImageCache
 
         if ($cachedImageData) {
             if ($returnObj) {
-                $image = $this->manager->read($cachedImageData);
+                $image = $this->manager->decodeBinary($cachedImageData);
 
                 return new CachedImage($image, $key);
             }
@@ -297,9 +298,9 @@ class ImageCache
 
         if ($image instanceof ImageInterface) {
             try {
-                return (string) $image->encodeByMediaType();
+                return (string) $image->encode();
             } catch (EncoderException) {
-                return (string) $image->toPng();
+                return (string) $image->encode(new PngEncoder);
             }
         }
 

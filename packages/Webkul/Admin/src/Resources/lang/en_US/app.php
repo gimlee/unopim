@@ -2960,7 +2960,7 @@ return [
 
             'files' => [
                 'add-file-btn'      => 'Add File',
-                'allowed-types'     => 'csv, doc, docx, mp3, pdf, ppt, pptx, rtf, svg, txt, wav',
+                'allowed-types'     => 'csv, doc, docx, mkv, mp3, mp4, pdf, ppt, pptx, rtf, svg, txt, wav, webm',
                 'not-allowed-error' => 'Only pdf files are allowed',
             ],
         ],

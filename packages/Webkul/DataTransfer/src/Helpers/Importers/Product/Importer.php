@@ -2818,7 +2818,7 @@ class Importer extends AbstractImporter
             foreach ($images as $key => $image) {
                 $file = new UploadedFile($image['path'], $image['name']);
 
-                $image = resolve(ImageManager::class)->read($file)->encode(new WebpEncoder);
+                $image = resolve(ImageManager::class)->decode($file)->encode(new WebpEncoder);
 
                 $imageDirectory = 'product/'.$product['id'];
 

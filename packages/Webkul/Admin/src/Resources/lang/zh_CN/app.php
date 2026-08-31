@@ -2781,7 +2781,7 @@ return [
             ],
             'files' => [
                 'add-file-btn'      => '添加文件',
-                'allowed-types'     => 'csv, doc, docx, mp3, pdf, ppt, pptx, rtf, svg, txt, wav',
+                'allowed-types'     => 'csv, doc, docx, mkv, mp3, mp4, pdf, ppt, pptx, rtf, svg, txt, wav, webm',
                 'not-allowed-error' => '仅允许PDF文件',
             ],
         ],

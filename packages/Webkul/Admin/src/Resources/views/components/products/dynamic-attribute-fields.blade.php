@@ -533,6 +533,27 @@
                 </x-slot>
                 </x-admin::form.control-group.control>
 
+                @if (
+                    $field->code === 'source_url'
+                    && is_string($value)
+                    && filter_var($value, FILTER_VALIDATE_URL)
+                    && in_array(parse_url($value, PHP_URL_SCHEME), ['http', 'https'], true)
+                )
+                    <a
+                        href="{{ $value }}"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        class="secondary-button mt-2 inline-flex w-fit items-center gap-1.5"
+                    >
+                        <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                            <path d="M14 3h7v7"></path>
+                            <path d="M10 14 21 3"></path>
+                            <path d="M21 14v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5"></path>
+                        </svg>
+                        打开 1688 商品页
+                    </a>
+                @endif
+
         @endswitch
         @if ($isLocked && ! $isReadOnlyMedia)
             </div>

@@ -59,6 +59,11 @@ return [
         'route' => 'admin.api.currencies.index',
         'sort'  => 2,
     ], [
+        'key'   => 'api.settings.exchange_rates',
+        'name'  => 'Exchange Rates',
+        'route' => 'admin.api.exchange_rates.index',
+        'sort'  => 3,
+    ], [
         'key'   => 'api.settings.currencies.create',
         'name'  => 'admin::app.acl.create',
         'route' => 'admin.api.currencies.store',
