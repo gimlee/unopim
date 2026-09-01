@@ -119,8 +119,21 @@ it('excludes _lft, _rgt, and id from audit history', function () {
     expect($auditExclude)->toContain('id');
 });
 
-it('has code and parent_id as fillable attributes', function () {
+it('has category and taxonomy metadata as fillable attributes', function () {
     $category = new Category;
 
-    expect($category->getFillable())->toBe(['code', 'parent_id']);
+    expect($category->getFillable())->toBe([
+        'code',
+        'parent_id',
+        'taxonomy_type',
+        'is_assignable',
+        'status',
+        'replaced_by_id',
+        'sort_order',
+        'source_platform',
+        'source_external_id',
+        'source_path',
+        'source_url',
+        'sync_locked',
+    ]);
 });

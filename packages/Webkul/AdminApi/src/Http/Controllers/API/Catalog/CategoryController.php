@@ -105,6 +105,14 @@ class CategoryController extends ApiController
             'code',
             'parent',
             'additional_data',
+            'taxonomy_type',
+            'is_assignable',
+            'status',
+            'source_platform',
+            'source_external_id',
+            'source_path',
+            'source_url',
+            'sync_locked',
         ]);
 
         $parentId = $this->getParentIdByCode($requestData['parent'] ?? null);
@@ -142,7 +150,11 @@ class CategoryController extends ApiController
             return $this->modelNotFoundResponse(trans('admin::app.catalog.categories.not-found', ['code' => $code]));
         }
 
-        $requestData = request()->only(['parent', 'additional_data']);
+        $requestData = request()->only([
+            'parent', 'additional_data', 'taxonomy_type', 'is_assignable', 'status',
+            'source_platform', 'source_external_id', 'source_path', 'source_url',
+            'sync_locked',
+        ]);
         $parentId = null;
         if (isset($requestData['parent'])) {
             $parentId = $this->getParentIdByCode($requestData['parent']);
@@ -210,7 +222,11 @@ class CategoryController extends ApiController
             return $this->modelNotFoundResponse(trans('admin::app.catalog.categories.not-found', ['code' => $code]));
         }
 
-        $requestData = request()->only(['parent', 'additional_data']);
+        $requestData = request()->only([
+            'parent', 'additional_data', 'taxonomy_type', 'is_assignable', 'status',
+            'source_platform', 'source_external_id', 'source_path', 'source_url',
+            'sync_locked',
+        ]);
         $parentId = null;
 
         if (isset($requestData['parent'])) {

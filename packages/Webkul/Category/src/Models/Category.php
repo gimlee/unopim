@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Kalnoy\Nestedset\NodeTrait;
 use Shetabit\Visitor\Traits\Visitable;
 use Webkul\Category\Contracts\Category as CategoryContract;
@@ -23,6 +24,16 @@ use Webkul\HistoryControl\Traits\HistoryTrait;
 #[Fillable([
     'code',
     'parent_id',
+    'taxonomy_type',
+    'is_assignable',
+    'status',
+    'replaced_by_id',
+    'sort_order',
+    'source_platform',
+    'source_external_id',
+    'source_path',
+    'source_url',
+    'sync_locked',
 ])]
 class Category extends Model implements CategoryContract, HistoryContract, PresentableHistoryInterface
 {
@@ -109,6 +120,21 @@ class Category extends Model implements CategoryContract, HistoryContract, Prese
         return $this->belongsTo(static::class, 'parent_id');
     }
 
+    public function aliases(): HasMany
+    {
+        return $this->hasMany(CategoryAlias::class);
+    }
+
+    public function classificationRules(): HasMany
+    {
+        return $this->hasMany(CategoryClassificationRule::class);
+    }
+
+    public function mappings(): HasMany
+    {
+        return $this->hasMany(CategoryMapping::class);
+    }
+
     /**
      * Typecasts the defined columns into given types
      */
@@ -116,6 +142,8 @@ class Category extends Model implements CategoryContract, HistoryContract, Prese
     {
         return [
             'additional_data' => 'array',
+            'is_assignable'   => 'boolean',
+            'sync_locked'     => 'boolean',
         ];
     }
 }

@@ -22,8 +22,21 @@ class CategoryRequest extends FormRequest
 
         $parentRule = ['nullable', 'integer', 'exists:categories,id'];
 
+        $taxonomyRules = [
+            'taxonomy_type' => ['sometimes', 'required', 'in:standard,container,source,platform,legacy'],
+            'taxonomy_status' => ['sometimes', 'required', 'in:active,inactive,deprecated'],
+            'is_assignable' => ['sometimes', 'boolean'],
+            'source_platform' => ['nullable', 'string', 'max:64'],
+            'source_external_id' => ['nullable', 'string', 'max:255'],
+            'source_path' => ['nullable', 'string'],
+            'source_url' => ['nullable', 'url', 'max:2048'],
+            'sync_locked' => ['sometimes', 'boolean'],
+            'taxonomy_aliases' => ['nullable', 'string'],
+            'taxonomy_rules' => ['nullable', 'json'],
+        ];
+
         if ($this->id) {
-            return [
+            return $taxonomyRules + [
                 'code' => [
                     $uniqueRule,
                     new Code,
@@ -32,7 +45,7 @@ class CategoryRequest extends FormRequest
             ];
         }
 
-        return [
+        return $taxonomyRules + [
             'code' => [
                 'required',
                 $uniqueRule,

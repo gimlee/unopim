@@ -143,6 +143,78 @@
             @endif
         </div>
 
+        <div class="p-4 bg-white dark:bg-cherry-900 rounded box-shadow">
+            <p class="mb-4 text-base text-gray-800 dark:text-white font-semibold">
+                @lang('category::app.taxonomy.category-metadata')
+            </p>
+
+            <div class="grid grid-cols-2 gap-3 max-sm:grid-cols-1">
+                <label class="text-sm text-gray-700 dark:text-gray-200">
+                    Taxonomy Type / 类目类型
+                    <select name="taxonomy_type" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700">
+                        @foreach (['standard' => 'Standard / PIM 标准类目', 'container' => 'Container / 导航节点', 'source' => 'Source / 来源类目', 'platform' => 'Platform / 平台类目', 'legacy' => 'Legacy / 旧类目'] as $value => $label)
+                            <option value="{{ $value }}" @selected(old('taxonomy_type', $category?->taxonomy_type ?? 'standard') === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </label>
+
+                <label class="text-sm text-gray-700 dark:text-gray-200">
+                    Status / 状态
+                    <select name="taxonomy_status" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700">
+                        @foreach (['active' => 'Active / 启用', 'inactive' => 'Inactive / 停用', 'deprecated' => 'Deprecated / 已弃用'] as $value => $label)
+                            <option value="{{ $value }}" @selected(old('taxonomy_status', $category?->status ?? 'active') === $value)>{{ $label }}</option>
+                        @endforeach
+                    </select>
+                </label>
+            </div>
+
+            <input type="hidden" name="is_assignable" value="0">
+            <label class="flex items-center gap-2 mt-3 text-sm text-gray-700 dark:text-gray-200">
+                <input type="checkbox" name="is_assignable" value="1" @checked((bool) old('is_assignable', $category?->is_assignable ?? false))>
+                Assignable leaf / 可分配给商品
+            </label>
+
+            <div class="grid grid-cols-2 gap-3 mt-3 max-sm:grid-cols-1">
+                <label class="text-sm text-gray-700 dark:text-gray-200">Source Platform / 来源平台<input name="source_platform" value="{{ old('source_platform', $category?->source_platform) }}" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700"></label>
+                <label class="text-sm text-gray-700 dark:text-gray-200">Source External ID / 来源 ID<input name="source_external_id" value="{{ old('source_external_id', $category?->source_external_id) }}" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700"></label>
+            </div>
+            <label class="block mt-3 text-sm text-gray-700 dark:text-gray-200">Source Path / 来源路径<input name="source_path" value="{{ old('source_path', $category?->source_path) }}" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700"></label>
+            <label class="block mt-3 text-sm text-gray-700 dark:text-gray-200">Source URL / 来源链接<input type="url" name="source_url" value="{{ old('source_url', $category?->source_url) }}" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700"></label>
+
+            <input type="hidden" name="sync_locked" value="0">
+            <label class="flex items-start gap-2 mt-3 text-sm text-gray-700 dark:text-gray-200">
+                <input type="checkbox" name="sync_locked" value="1" @checked((bool) old('sync_locked', $category?->sync_locked ?? (bool) $category?->source_platform))>
+                <span>
+                    Preserve manual edits / 保护人工修改
+                    <span class="block text-xs text-gray-500">启用后，刷新来源类目只更新来源路径和链接，不覆盖名称、父级、状态及可分配设置。</span>
+                </span>
+            </label>
+
+            @php
+                $taxonomyAliases = $category
+                    ? $category->aliases->pluck('alias')->implode("\n")
+                    : '';
+                $taxonomyRules = $category
+                    ? $category->classificationRules->map(fn ($rule) => [
+                        'rule_type' => $rule->rule_type,
+                        'field' => $rule->field,
+                        'operator' => $rule->operator,
+                        'value' => $rule->value,
+                        'weight' => (float) $rule->weight,
+                        'status' => (bool) $rule->status,
+                    ])->values()->toJson(JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT)
+                    : '[]';
+            @endphp
+            <label class="block mt-3 text-sm text-gray-700 dark:text-gray-200">
+                Aliases / 别名（每行一个）
+                <textarea name="taxonomy_aliases" rows="4" class="w-full mt-1 px-3 py-2 border rounded dark:bg-cherry-800 dark:border-cherry-700">{{ old('taxonomy_aliases', $taxonomyAliases) }}</textarea>
+            </label>
+            <label class="block mt-3 text-sm text-gray-700 dark:text-gray-200">
+                Classification Rules / 分类规则（JSON 数组）
+                <textarea name="taxonomy_rules" rows="7" class="w-full mt-1 px-3 py-2 border rounded font-mono text-xs dark:bg-cherry-800 dark:border-cherry-700">{{ old('taxonomy_rules', $taxonomyRules) }}</textarea>
+            </label>
+        </div>
+
         {!! view_render_event('unopim.admin.catalog.categories.edit.card.general.after', ['category' => $category]) !!}
 
         @if (! $leftCategoryFields->isEmpty())

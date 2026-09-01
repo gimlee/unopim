@@ -61,6 +61,14 @@ class CategoryDataSource extends ApiDataSource
                 'code'            => $data['code'],
                 'parent'          => $data['parent_category']['code'] ?? null,
                 'additional_data' => $data['additional_data'],
+                'taxonomy_type'   => $data['taxonomy_type'],
+                'is_assignable'   => $data['is_assignable'],
+                'status'          => $data['status'],
+                'source_platform' => $data['source_platform'],
+                'source_external_id' => $data['source_external_id'],
+                'source_path'     => $data['source_path'],
+                'source_url'      => $data['source_url'],
+                'sync_locked'     => $data['sync_locked'],
             ];
         }, $paginator['data'] ?? []);
     }
@@ -100,6 +108,13 @@ class CategoryDataSource extends ApiDataSource
             'code'            => $category['code'],
             'parent'          => $category['parent_category']['code'] ?? null,
             'additional_data' => $category['additional_data'],
+            'taxonomy_type'   => $category['taxonomy_type'],
+            'is_assignable'   => $category['is_assignable'],
+            'status'          => $category['status'],
+            'source_platform' => $category['source_platform'],
+            'source_external_id' => $category['source_external_id'],
+            'source_path'     => $category['source_path'],
+            'source_url'      => $category['source_url'],
         ];
     }
 

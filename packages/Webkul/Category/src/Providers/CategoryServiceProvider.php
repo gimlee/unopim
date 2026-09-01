@@ -16,6 +16,14 @@ class CategoryServiceProvider extends ServiceProvider
     {
         $this->loadMigrationsFrom(__DIR__.'/../Database/Migrations');
 
+        $this->loadTranslationsFrom(__DIR__.'/../Resources/lang', 'category');
+
+        $this->loadViewsFrom(__DIR__.'/../Resources/views', 'category');
+
+        $this->loadRoutesFrom(__DIR__.'/../Routes/web.php');
+
+        $this->loadRoutesFrom(__DIR__.'/../Routes/api.php');
+
         CategoryProxy::observe(CategoryObserver::class);
     }
 
@@ -35,6 +43,8 @@ class CategoryServiceProvider extends ServiceProvider
     public function registerConfig(): void
     {
         $this->mergeConfigFrom(dirname(__DIR__).'/Config/category_field_types.php', 'category_field_types');
+        $this->mergeConfigFrom(dirname(__DIR__).'/Config/menu.php', 'menu.admin');
+        $this->mergeConfigFrom(dirname(__DIR__).'/Config/acl.php', 'acl');
     }
 
     /**

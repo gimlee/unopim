@@ -21,6 +21,12 @@ class ProductCategoriesValidator extends ValuesValidator
                     if (Category::where('code', $value)->whereNull('parent_id')->exists()) {
                         $fail(trans('admin::app.catalog.products.categories.root-not-allowed'));
                     }
+
+                    $category = Category::where('code', $value)->first();
+                    if ($category && in_array($category->taxonomy_type, ['standard', 'container', 'source', 'platform'], true)
+                        && (! $category->is_assignable || $category->status !== 'active')) {
+                        $fail('Only active assignable standard category leaves can be assigned to products.');
+                    }
                 },
             ],
         ];

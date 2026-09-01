@@ -6,6 +6,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Webkul\Admin\DataGrids\Catalog\CategoryDataGrid;
@@ -19,6 +20,8 @@ use Webkul\Admin\Http\Requests\MassDestroyRequest;
 use Webkul\Admin\Http\Resources\Catalog\CategoryTreeResource;
 use Webkul\Category\Repositories\CategoryFieldRepository;
 use Webkul\Category\Repositories\CategoryRepository;
+use Webkul\Category\Models\CategoryAlias;
+use Webkul\Category\Models\CategoryClassificationRule;
 use Webkul\Category\Validator\Catalog\CategoryRequestValidator;
 use Webkul\Core\Repositories\ChannelRepository;
 use Webkul\Core\Traits\HtmlPurifier;
@@ -272,7 +275,18 @@ class CategoryController extends Controller
             'name',
             'parent_id',
             'additional_data',
+            'taxonomy_type',
+            'is_assignable',
+            'source_platform',
+            'source_external_id',
+            'source_path',
+            'source_url',
+            'sync_locked',
         ])));
+
+        $category->status = $categoryRequest->input('taxonomy_status', 'active');
+        $category->save();
+        $this->syncTaxonomyMetadata($categoryRequest, $category);
 
         Event::dispatch('catalog.category.create.after', $category);
 
@@ -366,13 +380,61 @@ class CategoryController extends Controller
             'parent_id',
             core()->getRequestedLocaleCode(),
             'additional_data',
+            'taxonomy_type',
+            'is_assignable',
+            'source_platform',
+            'source_external_id',
+            'source_path',
+            'source_url',
+            'sync_locked',
         ])), $id);
+
+        $category->status = $categoryRequest->input('taxonomy_status', $category->status);
+        $category->save();
+        $this->syncTaxonomyMetadata($categoryRequest, $category);
 
         Event::dispatch('catalog.category.update.after', $category);
 
         session()->flash('success', trans('admin::app.catalog.categories.update-success'));
 
         return redirect()->route(...$destination);
+    }
+
+    protected function syncTaxonomyMetadata(CategoryRequest $request, object $category): void
+    {
+        if ($request->has('taxonomy_aliases')) {
+            $aliases = collect(preg_split('/\R/u', (string) $request->input('taxonomy_aliases')))
+                ->map(fn ($alias) => preg_replace('/\s+/u', ' ', trim((string) $alias)))
+                ->filter()
+                ->unique(fn ($alias) => Str::lower($alias));
+            $category->aliases()->delete();
+            foreach ($aliases as $alias) {
+                CategoryAlias::create([
+                    'category_id' => $category->id,
+                    'locale' => core()->getRequestedLocaleCode(),
+                    'alias' => $alias,
+                    'normalized_alias' => Str::lower($alias),
+                    'source' => 'manual',
+                ]);
+            }
+        }
+
+        if ($request->has('taxonomy_rules')) {
+            $rules = json_decode((string) ($request->input('taxonomy_rules') ?: '[]'), true) ?: [];
+            $category->classificationRules()->delete();
+            foreach ($rules as $position => $rule) {
+                CategoryClassificationRule::create([
+                    'category_id' => $category->id,
+                    'rule_type' => $rule['rule_type'] ?? 'keyword',
+                    'field' => $rule['field'] ?? 'any',
+                    'operator' => $rule['operator'] ?? 'contains',
+                    'value' => (string) ($rule['value'] ?? ''),
+                    'weight' => $rule['weight'] ?? 1,
+                    'status' => $rule['status'] ?? true,
+                    'position' => $position,
+                ]);
+            }
+        }
     }
 
     /**
