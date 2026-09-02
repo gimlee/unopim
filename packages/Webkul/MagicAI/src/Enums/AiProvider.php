@@ -17,6 +17,8 @@ enum AiProvider: string
     case DeepSeek = 'deepseek';
     case Azure = 'azure';
     case OpenRouter = 'openrouter';
+    case Zhipu = 'zhipu';
+    case ZhipuCodePlan = 'zhipu_code_plan';
     case Custom = 'custom';
 
     public function toLab(): Lab
@@ -32,6 +34,8 @@ enum AiProvider: string
             self::DeepSeek   => Lab::DeepSeek,
             self::Azure      => Lab::Azure,
             self::OpenRouter => Lab::OpenRouter,
+            self::Zhipu,
+            self::ZhipuCodePlan,
             // Custom providers (Cerebras, Together, Fireworks, Perplexity,
             // DeepInfra, etc.) implement OpenAI's /chat/completions endpoint,
             // which laravel/ai's dedicated OpenAI-compatible driver speaks.
@@ -51,17 +55,19 @@ enum AiProvider: string
     public function defaultUrl(): string
     {
         return match ($this) {
-            self::OpenAI     => 'https://api.openai.com/v1',
-            self::Anthropic  => 'https://api.anthropic.com/v1',
-            self::Gemini     => 'https://generativelanguage.googleapis.com/v1beta',
-            self::Groq       => 'https://api.groq.com/openai/v1',
-            self::Ollama     => 'http://localhost:11434',
-            self::XAI        => 'https://api.x.ai/v1',
-            self::Mistral    => 'https://api.mistral.ai/v1',
-            self::DeepSeek   => 'https://api.deepseek.com',
-            self::Azure      => '',
-            self::OpenRouter => 'https://openrouter.ai/api/v1',
-            self::Custom     => '',
+            self::OpenAI        => 'https://api.openai.com/v1',
+            self::Anthropic     => 'https://api.anthropic.com/v1',
+            self::Gemini        => 'https://generativelanguage.googleapis.com/v1beta',
+            self::Groq          => 'https://api.groq.com/openai/v1',
+            self::Ollama        => 'http://localhost:11434',
+            self::XAI           => 'https://api.x.ai/v1',
+            self::Mistral       => 'https://api.mistral.ai/v1',
+            self::DeepSeek      => 'https://api.deepseek.com',
+            self::Azure         => '',
+            self::OpenRouter    => 'https://openrouter.ai/api/v1',
+            self::Zhipu         => 'https://open.bigmodel.cn/api/paas/v4',
+            self::ZhipuCodePlan => 'https://open.bigmodel.cn/api/coding/paas/v4',
+            self::Custom        => '',
         };
     }
 
@@ -69,6 +75,8 @@ enum AiProvider: string
     {
         return match ($this) {
             self::OpenRouter => 'openrouter',
+            self::Zhipu,
+            self::ZhipuCodePlan,
             // Custom routes through laravel/ai's OpenAI-compatible driver, so
             // its api_url override must land in that config namespace.
             self::Custom => 'openai-compatible',
@@ -79,17 +87,19 @@ enum AiProvider: string
     public function label(): string
     {
         return match ($this) {
-            self::OpenAI     => 'OpenAI',
-            self::Anthropic  => 'Anthropic',
-            self::Gemini     => 'Google Gemini',
-            self::Groq       => 'Groq',
-            self::Ollama     => 'Ollama',
-            self::XAI        => 'xAI (Grok)',
-            self::Mistral    => 'Mistral',
-            self::DeepSeek   => 'DeepSeek',
-            self::Azure      => 'Azure OpenAI',
-            self::OpenRouter => 'OpenRouter',
-            self::Custom     => 'Custom (OpenAI-compatible)',
+            self::OpenAI        => 'OpenAI',
+            self::Anthropic     => 'Anthropic',
+            self::Gemini        => 'Google Gemini',
+            self::Groq          => 'Groq',
+            self::Ollama        => 'Ollama',
+            self::XAI           => 'xAI (Grok)',
+            self::Mistral       => 'Mistral',
+            self::DeepSeek      => 'DeepSeek',
+            self::Azure         => 'Azure OpenAI',
+            self::OpenRouter    => 'OpenRouter',
+            self::Zhipu         => '智谱 AI（通用 API）',
+            self::ZhipuCodePlan => '智谱 Code Plan（仅编码工具）',
+            self::Custom        => 'Custom (OpenAI-compatible)',
         };
     }
 
@@ -110,23 +120,51 @@ enum AiProvider: string
 
         try {
             return match ($this) {
-                self::OpenAI     => $this->fetchOpenAiModels($client, $apiKey),
-                self::Anthropic  => $this->fetchAnthropicModels($client, $apiKey),
-                self::Gemini     => $this->fetchGeminiModels($client, $apiKey),
-                self::Groq       => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.groq.com/openai/v1/models'),
-                self::Ollama     => $this->fetchOllamaModels($client, $apiUrl ?: 'http://localhost:11434'),
-                self::XAI        => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.x.ai/v1/models'),
-                self::Mistral    => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.mistral.ai/v1/models'),
-                self::DeepSeek   => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.deepseek.com/models'),
-                self::OpenRouter => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://openrouter.ai/api/v1/models'),
-                self::Azure      => $this->fetchAzureModels($client, $apiKey, $apiUrl),
-                self::Custom     => $this->fetchCustomModels($client, $apiKey, $apiUrl),
+                self::OpenAI        => $this->fetchOpenAiModels($client, $apiKey),
+                self::Anthropic     => $this->fetchAnthropicModels($client, $apiKey),
+                self::Gemini        => $this->fetchGeminiModels($client, $apiKey),
+                self::Groq          => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.groq.com/openai/v1/models'),
+                self::Ollama        => $this->fetchOllamaModels($client, $apiUrl ?: 'http://localhost:11434'),
+                self::XAI           => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.x.ai/v1/models'),
+                self::Mistral       => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.mistral.ai/v1/models'),
+                self::DeepSeek      => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://api.deepseek.com/models'),
+                self::OpenRouter    => $this->fetchOpenAiCompatModels($client, $apiKey, 'https://openrouter.ai/api/v1/models'),
+                self::Zhipu         => $this->fetchZhipuModels($client, $apiKey, $apiUrl ?: $this->defaultUrl()),
+                self::ZhipuCodePlan => $this->fetchZhipuCodePlanModels($client, $apiKey, $apiUrl ?: $this->defaultUrl()),
+                self::Azure         => $this->fetchAzureModels($client, $apiKey, $apiUrl),
+                self::Custom        => $this->fetchCustomModels($client, $apiKey, $apiUrl),
             };
         } catch (\Exception $e) {
             report($e);
 
             throw $e;
         }
+    }
+
+    /**
+     * Fetch the public Zhipu model catalogue through its OpenAI-compatible API.
+     */
+    private function fetchZhipuModels(Client $client, ?string $apiKey, string $baseUrl): array
+    {
+        return $this->fetchOpenAiCompatModels($client, $apiKey, rtrim($baseUrl, '/').'/models');
+    }
+
+    /**
+     * Coding Plan exposes an OpenAI-compatible endpoint, but its entitlement is
+     * restricted by Zhipu to supported coding tools. Keep the requested model
+     * IDs available for tool configuration even when /models is unavailable.
+     */
+    private function fetchZhipuCodePlanModels(Client $client, ?string $apiKey, string $baseUrl): array
+    {
+        $configured = ['glm-5.3-flash', 'glm-5.3', 'glm-5.2'];
+
+        try {
+            $remote = $this->fetchOpenAiCompatModels($client, $apiKey, rtrim($baseUrl, '/').'/models');
+        } catch (\Throwable) {
+            $remote = [];
+        }
+
+        return array_values(array_unique(array_merge($configured, $remote)));
     }
 
     /**

@@ -55,6 +55,8 @@ class LaravelAiAdapter implements LLMModelInterface, SupportsStructuredTranslati
             }
 
             $overrides['url'] = $this->platform->api_url;
+        } elseif (in_array($this->aiProvider, [AiProvider::Zhipu, AiProvider::ZhipuCodePlan], true)) {
+            $overrides['url'] = $this->platform->api_url ?: $this->aiProvider->defaultUrl();
         } elseif ($this->platform->api_url) {
             $overrides['url'] = $this->platform->api_url;
         }

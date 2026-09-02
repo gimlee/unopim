@@ -13,13 +13,17 @@ class TaxonomyController extends Controller
 {
     public function sync(Request $request, TaxonomySynchronizer $synchronizer): JsonResponse
     {
+        set_time_limit(300);
         $payload = $request->validate([
             'categories' => ['sometimes', 'array'],
             'platform_taxonomies' => ['sometimes', 'array'],
+            'source_mappings' => ['sometimes', 'array'],
             'assignments' => ['sometimes', 'array'],
             'fix_tree' => ['sometimes', 'boolean'],
             'migrate_source_category' => ['sometimes', 'nullable', 'string'],
             'fallback_category' => ['sometimes', 'nullable', 'string'],
+            'remove_categories' => ['sometimes', 'array'],
+            'remove_categories.*' => ['string', 'max:255'],
             'sync_state' => ['sometimes', 'array'],
             'sync_state.key' => ['required_with:sync_state', 'string', 'max:255'],
             'sync_state.version' => ['required_with:sync_state', 'string', 'max:255'],

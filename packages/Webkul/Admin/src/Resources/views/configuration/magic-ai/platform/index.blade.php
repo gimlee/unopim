@@ -159,6 +159,10 @@
                                 <x-admin::form.control-group.error control-name="provider" />
                             </x-admin::form.control-group>
 
+                            <div v-if="form.provider === 'zhipu_code_plan'" class="mb-4 rounded border border-orange-200 bg-orange-50 p-3 text-xs text-orange-700">
+                                智谱 Code Plan 仅用于智谱官方支持的编码工具，不会出现在商品 AI 分类的平台列表中。商品分类请选择“智谱 AI（通用 API）”。
+                            </div>
+
                             <template v-if="form.provider">
                                 <!-- Label -->
                                 <x-admin::form.control-group>
@@ -354,6 +358,8 @@
                             groq: 'Groq', ollama: 'Ollama', xai: 'xAI (Grok)',
                             mistral: 'Mistral', deepseek: 'DeepSeek',
                             azure: 'Azure OpenAI', openrouter: 'OpenRouter',
+                            zhipu: '智谱 AI（通用 API）',
+                            zhipu_code_plan: '智谱 Code Plan（仅编码工具）',
                             custom: 'Custom (OpenAI-compatible)',
                         },
                     };
@@ -382,6 +388,8 @@
                             xai: 'https://api.x.ai/v1', mistral: 'https://api.mistral.ai/v1',
                             deepseek: 'https://api.deepseek.com', azure: '',
                             openrouter: 'https://openrouter.ai/api/v1',
+                            zhipu: 'https://open.bigmodel.cn/api/paas/v4',
+                            zhipu_code_plan: 'https://open.bigmodel.cn/api/coding/paas/v4',
                             custom: '',
                         };
                     },
@@ -427,6 +435,10 @@
                         this.selectedModels = [];
                         this.fetchedModels = [];
                         this.form.api_url = this.providerDefaultUrls[this.form.provider] || '';
+                        if (this.form.provider === 'zhipu_code_plan') {
+                            this.fetchedModels = ['glm-5.3-flash', 'glm-5.3', 'glm-5.2'];
+                            this.selectedModels = ['glm-5.3-flash'];
+                        }
                         this.fetchError = '';
                     },
 
@@ -463,7 +475,10 @@
                             this.fetchedModels = models;
 
                             if (models.length && this.selectedModels.length === 0) {
-                                if (recommended.length) {
+                                if (this.form.provider === 'zhipu_code_plan' && models.includes('glm-5.3-flash')) {
+                                    this.selectedModels = ['glm-5.3-flash'];
+                                }
+                                if (recommended.length && this.selectedModels.length === 0) {
                                     this.selectedModels = recommended.filter(m => models.includes(m));
                                 }
                                 if (!this.selectedModels.length) {

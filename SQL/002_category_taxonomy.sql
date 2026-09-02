@@ -12,6 +12,8 @@ ALTER TABLE categories ADD COLUMN IF NOT EXISTS source_path text NULL;
 ALTER TABLE categories ADD COLUMN IF NOT EXISTS source_url text NULL;
 ALTER TABLE categories ADD COLUMN IF NOT EXISTS sync_locked boolean NOT NULL DEFAULT false;
 
+-- 旧测试类目的删除由 TaxonomySynchronizer 在迁移商品 JSON 引用后执行；不要直接删除仍被商品使用的类目。
+
 CREATE TABLE IF NOT EXISTS category_aliases (
     id bigserial PRIMARY KEY,
     category_id integer NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
@@ -87,6 +89,24 @@ CREATE TABLE IF NOT EXISTS category_mappings (
     UNIQUE (category_id, platform_category_id)
 );
 
+CREATE TABLE IF NOT EXISTS category_source_mappings (
+    id bigserial PRIMARY KEY,
+    category_id integer NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    source_category_id integer NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+    source_platform varchar(64) NOT NULL,
+    mapping_type varchar(32) NOT NULL DEFAULT 'exact',
+    status varchar(32) NOT NULL DEFAULT 'draft',
+    confidence numeric(5,4) NULL,
+    reviewed_by integer NULL REFERENCES admins(id) ON DELETE SET NULL,
+    reviewed_at timestamptz NULL,
+    created_at timestamp NULL,
+    updated_at timestamp NULL,
+    UNIQUE (category_id, source_category_id)
+);
+
+CREATE INDEX IF NOT EXISTS category_source_mapping_status_idx
+    ON category_source_mappings (source_platform, status);
+
 CREATE TABLE IF NOT EXISTS product_category_assignments (
     id bigserial PRIMARY KEY,
     product_id integer NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -103,6 +123,25 @@ CREATE TABLE IF NOT EXISTS product_category_assignments (
     updated_at timestamp NULL,
     UNIQUE (product_id, category_id, role)
 );
+
+CREATE TABLE IF NOT EXISTS product_platform_category_assignments (
+    id bigserial PRIMARY KEY,
+    product_id integer NOT NULL REFERENCES products(id) ON DELETE CASCADE,
+    platform varchar(64) NOT NULL,
+    platform_category_id bigint NOT NULL REFERENCES platform_categories(id) ON DELETE RESTRICT,
+    status varchar(32) NOT NULL DEFAULT 'confirmed',
+    method varchar(32) NOT NULL DEFAULT 'manual',
+    confidence numeric(5,4) NULL,
+    evidence json NULL,
+    reviewed_by integer NULL REFERENCES admins(id) ON DELETE SET NULL,
+    reviewed_at timestamptz NULL,
+    created_at timestamp NULL,
+    updated_at timestamp NULL,
+    UNIQUE (product_id, platform)
+);
+
+CREATE INDEX IF NOT EXISTS product_platform_category_lookup_idx
+    ON product_platform_category_assignments (platform, platform_category_id);
 
 CREATE TABLE IF NOT EXISTS platform_category_attributes (
     id bigserial PRIMARY KEY,

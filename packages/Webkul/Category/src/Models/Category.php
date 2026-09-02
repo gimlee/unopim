@@ -135,6 +135,16 @@ class Category extends Model implements CategoryContract, HistoryContract, Prese
         return $this->hasMany(CategoryMapping::class);
     }
 
+    public function sourceMappings(): HasMany
+    {
+        return $this->hasMany(CategorySourceMapping::class);
+    }
+
+    public function canonicalMappings(): HasMany
+    {
+        return $this->hasMany(CategorySourceMapping::class, 'source_category_id');
+    }
+
     /**
      * Typecasts the defined columns into given types
      */

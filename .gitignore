@@ -46,6 +46,7 @@ test-results
 .github/skills
 /docs/*
 !/docs/exchange-rates.md
+!/docs/category-selection-ai.md
 graphify-out
 .mcp.json
 boost.json

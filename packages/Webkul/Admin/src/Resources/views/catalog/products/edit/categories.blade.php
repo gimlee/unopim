@@ -252,6 +252,7 @@
 
                 this.$emitter.on('unsaved-changes:reset', this.restoreSelection);
                 this.$emitter.on('form-saved', this.commitSelection);
+                this.$emitter.on('taxonomy-standard-category-saved', this.applyTaxonomySelection);
             },
 
             beforeUnmount() {
@@ -259,6 +260,7 @@
 
                 this.$emitter.off('unsaved-changes:reset', this.restoreSelection);
                 this.$emitter.off('form-saved', this.commitSelection);
+                this.$emitter.off('taxonomy-standard-category-saved', this.applyTaxonomySelection);
             },
 
             methods: {
@@ -286,6 +288,17 @@
 
                 commitSelection() {
                     this.initialSelected = [...this.selectedCodes];
+                },
+
+                applyTaxonomySelection(payload) {
+                    if (! payload?.code) {
+                        return;
+                    }
+
+                    this.labelByCode[payload.code] = payload.label || payload.code;
+                    this.selectedCodes = [payload.code];
+                    this.initialSelected = [payload.code];
+                    this.publishSummary();
                 },
 
                 onSearchInput() {

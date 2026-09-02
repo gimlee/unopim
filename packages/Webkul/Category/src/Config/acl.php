@@ -8,9 +8,39 @@ return [
         'sort' => 7,
     ],
     [
-        'key' => 'catalog.taxonomy.edit',
+        'key' => 'catalog.taxonomy-mappings',
+        'name' => 'category::app.taxonomy.mappings-title',
+        'route' => 'admin.catalog.taxonomy.mappings.index',
+        'sort' => 8,
+    ],
+    [
+        'key' => 'catalog.taxonomy-mappings.edit',
         'name' => 'admin::app.acl.edit',
         'route' => 'admin.catalog.taxonomy.mappings.store',
         'sort' => 1,
+    ],
+    [
+        'key' => 'catalog.taxonomy-mappings.source-1688',
+        'name' => 'category::app.taxonomy.source-mappings-title',
+        'route' => 'admin.catalog.taxonomy.mappings.source.index',
+        'sort' => 2,
+    ],
+    [
+        'key' => 'catalog.taxonomy-mappings.platforms',
+        'name' => 'category::app.taxonomy.platform-mappings-title',
+        'route' => 'admin.catalog.taxonomy.mappings.platform.index',
+        'sort' => 3,
+    ],
+    [
+        'key' => 'catalog.taxonomy-mappings.manage',
+        'name' => 'category::app.taxonomy.manage-mappings-title',
+        'route' => 'admin.catalog.taxonomy.mappings.form',
+        'sort' => 4,
+    ],
+    [
+        'key' => 'catalog.category-reviews',
+        'name' => 'category::app.taxonomy.reviews-title',
+        'route' => 'admin.catalog.taxonomy.reviews.index',
+        'sort' => 9,
     ],
 ];

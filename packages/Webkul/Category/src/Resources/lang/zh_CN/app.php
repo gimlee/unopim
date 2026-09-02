@@ -2,8 +2,13 @@
 
 return [
     'taxonomy' => [
-        'title' => '标准类目与平台映射',
-        'subtitle' => 'PIM 标准类目、平台类目版本、映射与商品分类审核',
+        'title' => 'PIM 标准类目',
+        'subtitle' => '维护 PIM 标准类目，并查看 1688 与各销售平台类目树的同步状态',
+        'mappings-title' => '平台类目映射',
+        'source-mappings-title' => 'PIM 标准类目 ↔ 1688 类目',
+        'platform-mappings-title' => 'PIM 标准类目 ↔ 销售平台类目',
+        'manage-mappings-title' => '新增 / 更新平台映射',
+        'reviews-title' => '商品主类目审核',
         'standard-count' => '标准类目',
         'assignable-count' => '可分配叶子',
         'mapping-count' => '已确认映射',
