@@ -224,6 +224,57 @@ class Product extends Model implements HistoryAuditable, PresentableHistoryInter
     }
 
     /**
+     * Return the best human-readable product name for the requested scope.
+     *
+     * Product names are stored inside the values JSON rather than in a model
+     * column. Keeping the fallback order here prevents review screens and
+     * variant listings from each inventing a slightly different resolver.
+     */
+    public function displayName(?string $channelCode = null, ?string $localeCode = null): string
+    {
+        return static::displayNameFromValues(
+            $this->resolvedValues(),
+            $channelCode,
+            $localeCode,
+            $this->sku,
+        );
+    }
+
+    public static function displayNameFromValues(
+        array $values,
+        ?string $channelCode = null,
+        ?string $localeCode = null,
+        ?string $fallback = null,
+    ): string {
+        $candidates = [];
+
+        if ($channelCode && $localeCode) {
+            $candidates[] = data_get($values, "channel_locale_specific.$channelCode.$localeCode.name");
+        }
+
+        foreach (['zh_CN', 'en_US'] as $locale) {
+            $candidates[] = data_get($values, "channel_locale_specific.default.$locale.name");
+            $candidates[] = data_get($values, "locale_specific.$locale.name");
+        }
+
+        $candidates[] = data_get($values, 'common.name');
+
+        foreach ((array) ($values['channel_locale_specific'] ?? []) as $locales) {
+            foreach ((array) $locales as $localized) {
+                $candidates[] = is_array($localized) ? ($localized['name'] ?? null) : null;
+            }
+        }
+
+        foreach ($candidates as $candidate) {
+            if (is_scalar($candidate) && trim((string) $candidate) !== '') {
+                return trim((string) $candidate);
+            }
+        }
+
+        return trim((string) $fallback);
+    }
+
+    /**
      * Overrides the default Eloquent query builder.
      *
      * @param  \Illuminate\Database\Query\Builder  $query
@@ -286,7 +337,10 @@ class Product extends Model implements HistoryAuditable, PresentableHistoryInter
 
         $productImage = null;
 
-        $productValues = $this->values;
+        // Legacy/imported products may legitimately have no values payload yet.
+        // Treat it as an empty value set so representative-image lookup can
+        // continue into variants instead of crashing the entire product page.
+        $productValues = $this->values ?: [];
 
         $currentChannelCode ??= core()->getRequestedChannelCode();
 

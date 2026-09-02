@@ -19,7 +19,7 @@
                     <template v-else>
                         <div
                             class="row grid gap-2.5 min-h-[47px] px-4 py-2.5 border-b dark:border-cherry-800 text-gray-600 dark:text-gray-300 bg-primary-50 dark:bg-cherry-800 font-semibold items-center"
-                            :style="`grid-template-columns: repeat(${gridsCount}, minmax(80px, 1fr))`"
+                            :style="`grid-template-columns: ${gridTemplateColumns}`"
                         >
                             <!-- Mass Actions -->
                             <p
@@ -146,7 +146,7 @@
                                 v-for="record in $parent.available.records"
                                 :key="record[$parent.available.meta.primary_column]"
                                 :class="{'cursor-pointer hover:bg-primary-50 hover:bg-opacity-30 dark:hover:bg-cherry-800': isRowEditable(record)}"
-                                :style="`grid-template-columns: repeat(${gridsCount}, minmax(80px, 1fr))`"
+                                :style="`grid-template-columns: ${gridTemplateColumns}`"
                                 @click="handleRowClick($event, record)"
                             >
                                 <!-- Mass Actions -->
@@ -300,6 +300,20 @@
                     }
 
                     return count;
+                },
+
+                gridTemplateColumns() {
+                    const tracks = this.visibleColumns.map(() => 'minmax(80px, 1fr)');
+
+                    if (this.$parent.available.massActions.length) {
+                        tracks.unshift('36px');
+                    }
+
+                    if (this.$parent.available.actions.length) {
+                        tracks.push('80px');
+                    }
+
+                    return tracks.join(' ');
                 },
             },
 

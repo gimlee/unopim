@@ -3,17 +3,19 @@
 namespace Webkul\Admin\Http\Controllers\MagicAI;
 
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
-use Laravel\Ai\AnonymousAgent;
 use Webkul\Admin\DataGrids\MagicAI\MagicAIPlatformDataGrid;
 use Webkul\Admin\Http\Controllers\Controller;
 use Webkul\Admin\Http\Requests\MagicAI\FetchModelsRequest;
+use Webkul\Admin\Http\Requests\MagicAI\PlatformModelTestRequest;
 use Webkul\Admin\Http\Requests\MagicAI\PlatformRequest;
 use Webkul\Admin\Http\Requests\MagicAI\PlatformTestRequest;
 use Webkul\AiAgent\Chat\AiErrorResolver;
+use Webkul\MagicAI\Agents\MagicContentAgent;
 use Webkul\MagicAI\Enums\AiProvider;
 use Webkul\MagicAI\Repository\MagicAIPlatformRepository;
 use Webkul\MagicAI\Services\ScopedProviderConfig;
@@ -232,10 +234,32 @@ class MagicAIPlatformController extends Controller
                 ], JsonResponse::HTTP_BAD_REQUEST);
             }
 
-            $agent = new AnonymousAgent(
-                instructions: 'You are a connectivity test bot. Reply with the single word OK.',
-                messages: [],
-                tools: [],
+            // Code Plan is licensed for supported coding tools and its chat
+            // quota can be exhausted even while the key and endpoint remain
+            // valid. Test the authenticated model catalogue instead: this is
+            // side-effect free, does not consume generation quota, and mirrors
+            // the OpenAI-compatible configuration used by rule-to-skills.
+            if ($provider === AiProvider::ZhipuCodePlan) {
+                $availableModels = $provider->fetchModels(
+                    $this->resolveApiKey(),
+                    request()->input('api_url') ?: $provider->defaultUrl(),
+                );
+
+                if ($availableModels === []) {
+                    throw new \RuntimeException('智谱 Code Plan 未返回可用模型');
+                }
+
+                return new JsonResponse([
+                    'success' => true,
+                    'message' => trans('admin::app.configuration.platform.message.test-success'),
+                ]);
+            }
+
+            $agent = new MagicContentAgent(
+                systemPrompt: 'You are a connectivity test bot. Reply with the single word OK.',
+                temperature: 0.1,
+                maxTokens: in_array($provider, [AiProvider::Zhipu, AiProvider::ZhipuCodePlan], true) ? 256 : 32,
+                providerOptions: $this->generationOptionsFromRequest($provider),
             );
 
             ScopedProviderConfig::run(
@@ -279,6 +303,65 @@ class MagicAIPlatformController extends Controller
             return new JsonResponse([
                 'success' => false,
                 'message' => trans('admin::app.configuration.platform.message.test-fail').': '.$detail,
+            ], $resolved['is_known'] ? $resolved['status'] : JsonResponse::HTTP_BAD_REQUEST);
+        }
+    }
+
+    /**
+     * Send a minimal prompt through the selected model. Unlike the connection
+     * test, this verifies generation entitlement, quota and request options.
+     */
+    public function testModel(PlatformModelTestRequest $request): JsonResponse
+    {
+        if (! $this->isSafeApiUrl($request->input('api_url'))) {
+            return new JsonResponse([
+                'success' => false,
+                'message' => trans('admin::app.configuration.platform.message.unsafe-api-url'),
+            ], JsonResponse::HTTP_UNPROCESSABLE_ENTITY);
+        }
+
+        $provider = AiProvider::from($request->string('provider')->toString());
+        $startedAt = microtime(true);
+
+        try {
+            $agent = new MagicContentAgent(
+                systemPrompt: 'You are a connectivity test assistant. Follow the requested output exactly.',
+                temperature: 0.1,
+                maxTokens: in_array($provider, [AiProvider::Zhipu, AiProvider::ZhipuCodePlan], true) ? 256 : 32,
+                providerOptions: $this->generationOptionsFromRequest($provider),
+            );
+
+            $response = ScopedProviderConfig::run(
+                $provider->configKey(),
+                $this->providerOverridesFromRequest(),
+                fn () => $agent->prompt(
+                    'Reply with exactly: MODEL_OK',
+                    provider: $provider->toLab(),
+                    model: $request->string('model')->toString(),
+                    timeout: 45,
+                ),
+            );
+
+            $reply = trim((string) $response->text);
+
+            if ($reply === '') {
+                throw new \RuntimeException('模型返回了空内容。');
+            }
+
+            return new JsonResponse([
+                'success'    => true,
+                'message'    => trans('admin::app.configuration.platform.message.model-test-success'),
+                'model'      => $request->string('model')->toString(),
+                'reply'      => mb_substr($reply, 0, 500),
+                'elapsed_ms' => (int) round((microtime(true) - $startedAt) * 1000),
+            ]);
+        } catch (\Throwable $e) {
+            $resolved = AiErrorResolver::resolve($e);
+
+            return new JsonResponse([
+                'success' => false,
+                'message' => trans('admin::app.configuration.platform.message.model-test-fail').': '.$resolved['message'],
+                'model'   => $request->string('model')->toString(),
             ], $resolved['is_known'] ? $resolved['status'] : JsonResponse::HTTP_BAD_REQUEST);
         }
     }
@@ -425,14 +508,46 @@ class MagicAIPlatformController extends Controller
             $overrides['url'] = request()->input('api_url');
         }
 
-        $extras = request()->input('extras');
-        if ($extras) {
-            $decoded = is_string($extras) ? json_decode($extras, true) : $extras;
-            if (is_array($decoded)) {
-                $overrides = array_merge($overrides, $decoded);
-            }
+        $extras = $this->requestExtras();
+        if ($extras !== []) {
+            $overrides = array_merge($overrides, Arr::except($extras, [
+                'thinking',
+                'reasoning_effort',
+            ]));
         }
 
         return $overrides;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function generationOptionsFromRequest(AiProvider $provider): array
+    {
+        if (! in_array($provider, [AiProvider::Zhipu, AiProvider::ZhipuCodePlan], true)) {
+            return [];
+        }
+
+        $effort = (string) ($this->requestExtras()['reasoning_effort'] ?? 'low');
+
+        if (! in_array($effort, ['low', 'high', 'max'], true)) {
+            $effort = 'low';
+        }
+
+        return [
+            'thinking'         => ['type' => 'enabled'],
+            'reasoning_effort' => $effort,
+        ];
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    protected function requestExtras(): array
+    {
+        $extras = request()->input('extras');
+        $decoded = is_string($extras) ? json_decode($extras, true) : $extras;
+
+        return is_array($decoded) ? $decoded : [];
     }
 }

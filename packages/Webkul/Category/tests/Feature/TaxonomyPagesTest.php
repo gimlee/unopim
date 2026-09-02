@@ -5,8 +5,8 @@ use Webkul\Category\Models\Category;
 use Webkul\Category\Models\CategoryMapping;
 use Webkul\Category\Models\PlatformCategory;
 use Webkul\Category\Models\PlatformTaxonomy;
+use Webkul\Category\Models\ProductCategoryAssignment;
 use Webkul\Category\Models\ProductPlatformCategoryAssignment;
-use Webkul\Category\Services\ProductCategoryAiClassifier;
 use Webkul\MagicAI\Enums\AiProvider;
 use Webkul\MagicAI\Models\MagicAIPlatform;
 use Webkul\Product\Models\Product;
@@ -50,6 +50,7 @@ it('renders the separated Chinese taxonomy management pages', function () {
         ->get(route('admin.catalog.taxonomy.reviews.index'))
         ->assertOk()
         ->assertSee('商品主类目审核')
+        ->assertSee('SKU / 商品名称')
         ->assertSee('完全无法分类');
 });
 
@@ -67,7 +68,7 @@ it('loads standard and tiktok categories one level at a time', function () {
         ->whereHas('taxonomy', fn ($query) => $query->where('platform', 'tiktok')->where('region', 'MY'))
         ->firstOrFail();
 
-    $this->actingAs($admin, 'admin')
+    $response = $this->actingAs($admin, 'admin')
         ->getJson(route('admin.catalog.taxonomy.selector.options', [
             'type'     => 'standard',
             'selected' => $standard->code,
@@ -75,6 +76,10 @@ it('loads standard and tiktok categories one level at a time', function () {
         ->assertOk()
         ->assertJsonPath('selection.value', $standard->code)
         ->assertJsonStructure(['levels' => [['selected_id', 'options']]]);
+
+    foreach ($response->json('levels') as $level) {
+        expect(collect($level['options'])->pluck('id'))->toContain($level['selected_id']);
+    }
 
     $this->actingAs($admin, 'admin')
         ->getJson(route('admin.catalog.taxonomy.selector.options', [
@@ -132,12 +137,12 @@ it('lets an admin save PIM and TikTok categories from a product page', function 
     ]);
 });
 
-it('exposes Zhipu providers but blocks Code Plan from product classification', function () {
+it('uses Zhipu general API and excludes Coding Plan from product classification', function () {
     expect(AiProvider::Zhipu->defaultUrl())->toBe('https://open.bigmodel.cn/api/paas/v4')
         ->and(AiProvider::ZhipuCodePlan->defaultUrl())->toBe('https://open.bigmodel.cn/api/coding/paas/v4')
         ->and(AiProvider::ZhipuCodePlan->label())->toContain('Code Plan');
 
-    $platform = MagicAIPlatform::create([
+    $codingPlatform = MagicAIPlatform::create([
         'label'      => 'Zhipu Code Plan Test',
         'provider'   => AiProvider::ZhipuCodePlan->value,
         'api_url'    => AiProvider::ZhipuCodePlan->defaultUrl(),
@@ -146,13 +151,54 @@ it('exposes Zhipu providers but blocks Code Plan from product classification', f
         'is_default' => false,
         'status'     => true,
     ]);
+    $generalPlatform = MagicAIPlatform::create([
+        'label'      => 'Zhipu General API Test',
+        'provider'   => AiProvider::Zhipu->value,
+        'api_url'    => AiProvider::Zhipu->defaultUrl(),
+        'api_key'    => 'not-a-real-key',
+        'models'     => 'glm-5.3-flash',
+        'is_default' => false,
+        'status'     => true,
+    ]);
 
-    app(ProductCategoryAiClassifier::class)->classify(
-        Product::query()->firstOrFail(),
-        $platform,
-        'glm-5.3-flash'
-    );
-})->throws(RuntimeException::class, '商品 AI 分类请配置');
+    $admin = Admin::query()->whereNotNull('role_id')->firstOrFail();
+
+    $this->actingAs($admin, 'admin')
+        ->get(route('admin.catalog.products.edit', Product::query()->firstOrFail()->id))
+        ->assertOk()
+        ->assertDontSee($codingPlatform->label)
+        ->assertSee($generalPlatform->label)
+        ->assertSee('glm-5.3-flash');
+});
+
+it('shows one review row for a configurable product and hides variant assignments', function () {
+    $admin = Admin::query()->whereNotNull('role_id')->firstOrFail();
+    $category = Category::query()
+        ->where('taxonomy_type', 'standard')
+        ->where('is_assignable', true)
+        ->where('status', 'active')
+        ->firstOrFail();
+    $parent = Product::factory()->configurable()->create(['sku' => 'REVIEW-PARENT-'.Str::random(8)]);
+    $variant = Product::factory()->simple()->create([
+        'sku'       => 'REVIEW-VARIANT-'.Str::random(8),
+        'parent_id' => $parent->id,
+    ]);
+    foreach ([$parent, $variant] as $product) {
+        ProductCategoryAssignment::create([
+            'product_id'  => $product->id,
+            'category_id' => $category->id,
+            'role'        => 'primary',
+            'status'      => 'proposed',
+            'method'      => 'rule',
+        ]);
+    }
+
+    $this->actingAs($admin, 'admin')
+        ->get(route('admin.catalog.taxonomy.reviews.index', ['search' => 'REVIEW-']))
+        ->assertOk()
+        ->assertSee($parent->sku)
+        ->assertDontSee($variant->sku);
+});
 
 it('edits a pending platform mapping target and status', function () {
     $admin = Admin::query()->whereNotNull('role_id')->firstOrFail();

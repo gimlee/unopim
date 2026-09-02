@@ -2,6 +2,7 @@
 
 namespace Webkul\MagicAI\Enums;
 
+use Composer\CaBundle\CaBundle;
 use GuzzleHttp\Client;
 use Laravel\Ai\Enums\Lab;
 
@@ -116,7 +117,10 @@ enum AiProvider: string
      */
     public function fetchModels(?string $apiKey, ?string $apiUrl = null): array
     {
-        $client = new Client(['timeout' => 15]);
+        $client = new Client([
+            'timeout' => 15,
+            'verify'  => CaBundle::getSystemCaRootBundlePath(),
+        ]);
 
         try {
             return match ($this) {

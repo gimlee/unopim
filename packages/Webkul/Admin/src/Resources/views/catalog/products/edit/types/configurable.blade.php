@@ -1,5 +1,27 @@
 {!! view_render_event('unopim.admin.catalog.product.edit.form.types.configurable.before', ['product' => $product]) !!}
 
+@php
+    $parentDisplayImagePath = $product->getProductDisplayImage();
+    $parentDisplayImageUrl = $parentDisplayImagePath
+        ? \Illuminate\Support\Facades\Storage::url($parentDisplayImagePath)
+        : null;
+    $normalizedVariants = $product->variants()
+        ->with(['attribute_family'])
+        ->get()
+        ->map(function ($item) use ($parentDisplayImageUrl) {
+            $normalized = $item->normalizeWithImage();
+
+            if (empty($normalized['image']) && $parentDisplayImageUrl) {
+                $normalized['image'] = $parentDisplayImageUrl;
+                $normalized['image_inherited'] = true;
+            } else {
+                $normalized['image_inherited'] = false;
+            }
+
+            return $normalized;
+        });
+@endphp
+
 <v-product-variations :errors="errors"></v-product-variations>
 <x-admin::media.gallery v-if="false" />
 
@@ -583,6 +605,7 @@
                 <div
                     class="w-full h-[60px] max-w-[60px] max-h-[60px] relative rounded overflow-hidden"
                     :class="{'border border-dashed border-gray-300 dark:border-cherry-800 dark:invert dark:mix-blend-exclusion': ! variant?.image, 'w-[60px]': variant?.image}"
+                    :title="variant.image_inherited ? '使用父商品主图' : variant.sku"
                 >
                     <template v-if="! variant?.image">
                         <img
@@ -605,9 +628,22 @@
                 </div>
 
                 <div class="grid gap-1.5 place-content-start">
-                    <p class="text-gray-600 dark:text-gray-300">
-                        @{{ "@lang('admin::app.catalog.products.edit.types.configurable.sku')".replace(':sku', variant.sku) }}
-                    </p>
+                    <div class="flex items-center gap-1.5">
+                        <p class="text-gray-600 dark:text-gray-300">
+                            @{{ "@lang('admin::app.catalog.products.edit.types.configurable.sku')".replace(':sku', variant.sku) }}
+                        </p>
+
+                        <button
+                            type="button"
+                            class="rounded p-1 text-base text-gray-400 transition hover:bg-primary-100 hover:text-primary-600 dark:hover:bg-cherry-800"
+                            :class="copied ? 'icon-done !text-green-600' : 'icon-copy'"
+                            :title="copied ? '已复制' : '复制 SKU'"
+                            :aria-label="`复制 SKU ${variant.sku}`"
+                            @click="copySku"
+                        ></button>
+                    </div>
+
+                    <span v-if="variant.image_inherited" class="text-[11px] text-primary-600">图片继承自父商品主图</span>
 
                     <v-error-message
                         :name="'variants[' + variant.id + '].sku'"
@@ -778,7 +814,7 @@
                 return {
                     defaultId: parseInt('{{ $product->additional['default_variant_id'] ?? null }}'),
 
-                    variants: @json($product->variants()->with(['attribute_family'])->get()->map(fn ($item) => $item->normalizeWithImage())),
+                    variants: @json($normalizedVariants),
 
                     superAttributes: @json($product->super_attributes()->with(['options', 'options.attribute', 'options.translations'])->get()),
 
@@ -911,6 +947,12 @@
                 'errors',
             ],
 
+            data() {
+                return {
+                    copied: false,
+                };
+            },
+
             computed: {
                 isDefault() {
                     return this.variant.id == this.defaultId;
@@ -927,6 +969,38 @@
             },
 
             methods: {
+                async copySku() {
+                    const text = String(this.variant?.sku || '').trim();
+
+                    if (!text) {
+                        return;
+                    }
+
+                    try {
+                        if (navigator.clipboard && window.isSecureContext) {
+                            await navigator.clipboard.writeText(text);
+                        } else {
+                            const input = document.createElement('textarea');
+                            input.value = text;
+                            input.setAttribute('readonly', '');
+                            input.style.position = 'fixed';
+                            input.style.opacity = '0';
+                            document.body.appendChild(input);
+                            input.select();
+                            document.execCommand('copy');
+                            input.remove();
+                        }
+
+                        this.copied = true;
+                        window.setTimeout(() => this.copied = false, 1500);
+                    } catch (error) {
+                        this.$emitter.emit('add-flash', {
+                            type: 'error',
+                            message: 'SKU 复制失败，请手动复制',
+                        });
+                    }
+                },
+
                 optionName(attribute, optionCode) {
                     let attributeOption = attribute.options.find((option) => {
                         return option.code == optionCode;

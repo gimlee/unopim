@@ -66,7 +66,7 @@
                         <span v-text="classifying ? '分类中…' : 'AI 分类'"></span>
                     </button>
                 </div>
-                <p v-else class="text-xs text-orange-600">暂无可用于业务分类的 Magic AI 平台。请配置通用 API；Code Plan 不会用于商品数据。</p>
+                <p v-else class="text-xs text-orange-600">暂无已启用的 Magic AI 平台，请先完成平台配置。</p>
 
                 <div v-if="suggestion" class="mt-3 rounded bg-blue-50 p-3 text-xs text-blue-800 dark:bg-cherry-800 dark:text-blue-200">
                     <p>AI 建议已代入上方选择器，请检查后保存。</p>

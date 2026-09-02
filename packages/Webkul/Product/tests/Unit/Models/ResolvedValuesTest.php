@@ -29,3 +29,21 @@ it('returns own values for a product without a parent', function () {
 
     expect($simple->resolvedValues()['common'])->toMatchArray(['sku' => 'SOLO', 'name' => 'Solo']);
 });
+
+it('resolves a localized display name and falls back to the sku', function () {
+    $localized = Product::factory()->create([
+        'sku'    => 'DISPLAY-NAME-SKU',
+        'values' => [
+            'channel_locale_specific' => [
+                'default' => ['zh_CN' => ['name' => '中文商品名称']],
+            ],
+        ],
+    ]);
+    $withoutName = Product::factory()->create([
+        'sku'    => 'FALLBACK-SKU',
+        'values' => ['common' => []],
+    ]);
+
+    expect($localized->displayName('default', 'zh_CN'))->toBe('中文商品名称')
+        ->and($withoutName->displayName('default', 'zh_CN'))->toBe('FALLBACK-SKU');
+});

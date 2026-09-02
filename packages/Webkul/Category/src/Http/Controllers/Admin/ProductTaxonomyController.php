@@ -31,7 +31,7 @@ class ProductTaxonomyController extends Controller
             'reason'                        => ['nullable', 'string', 'max:500'],
         ]);
 
-        $product = Product::findOrFail($productId);
+        $product = $this->taxonomyProduct($productId);
         $category = Category::query()
             ->where('code', $data['standard_category_code'])
             ->where('taxonomy_type', 'standard')
@@ -136,10 +136,17 @@ class ProductTaxonomyController extends Controller
             'model'       => ['required', 'string', 'max:255'],
         ]);
 
-        $product = Product::findOrFail($productId);
+        $product = $this->taxonomyProduct($productId);
         $platform = MagicAIPlatform::findOrFail($data['platform_id']);
         $result = $classifier->classify($product, $platform, $data['model']);
 
         return response()->json(['data' => $result]);
+    }
+
+    protected function taxonomyProduct(int $productId): Product
+    {
+        $product = Product::with('parent')->findOrFail($productId);
+
+        return $product->parent ?: $product;
     }
 }

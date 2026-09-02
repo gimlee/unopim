@@ -29,6 +29,21 @@ it('resolves rate-limit exception to friendly message without surfacing raw deta
     expect($resolved['message'])->toBe(trans('ai-agent::app.common.error-rate-limit'));
 });
 
+it('surfaces a Zhipu business code instead of hiding it as a generic rate limit', function () {
+    $requestException = makeRequestException(429, json_encode([
+        'error' => [
+            'code'    => '1313',
+            'message' => '当前使用模式不符合公平使用策略。',
+        ],
+    ]));
+    $exception = RateLimitedException::forProvider('openai-compatible', 429, $requestException);
+
+    $resolved = AiErrorResolver::resolve($exception);
+
+    expect($resolved['status'])->toBe(429)
+        ->and($resolved['message'])->toBe('HTTP 429 / 1313: 当前使用模式不符合公平使用策略。');
+});
+
 it('resolves provider overloaded exception to a friendly message', function () {
     $exception = ProviderOverloadedException::forProvider('openai');
 

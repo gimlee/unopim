@@ -47,6 +47,7 @@ test-results
 /docs/*
 !/docs/exchange-rates.md
 !/docs/category-selection-ai.md
+!/docs/product-info-management-integration.md
 graphify-out
 .mcp.json
 boost.json

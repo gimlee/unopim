@@ -28,3 +28,19 @@ it('omits temperature when null so reasoning models accept the request', functio
     expect($options->temperature)->toBeNull();
     expect($options->maxTokens)->toBe(16000);
 });
+
+it('passes GLM thinking options into the provider request body options', function () {
+    $agent = new MagicContentAgent(
+        providerOptions: [
+            'thinking'         => ['type' => 'enabled'],
+            'reasoning_effort' => 'low',
+        ],
+    );
+
+    $options = TextGenerationOptions::forAgent($agent);
+
+    expect($options->providerOptions('openai-compatible'))->toBe([
+        'thinking'         => ['type' => 'enabled'],
+        'reasoning_effort' => 'low',
+    ]);
+});

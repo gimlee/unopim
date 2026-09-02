@@ -160,7 +160,7 @@
                             </x-admin::form.control-group>
 
                             <div v-if="form.provider === 'zhipu_code_plan'" class="mb-4 rounded border border-orange-200 bg-orange-50 p-3 text-xs text-orange-700">
-                                智谱 Code Plan 仅用于智谱官方支持的编码工具，不会出现在商品 AI 分类的平台列表中。商品分类请选择“智谱 AI（通用 API）”。
+                                智谱 Coding Plan 仅适用于官方支持的编码工具，不用于 PIM 商品分类。商品分类请配置“智谱 AI（通用 API）”。
                             </div>
 
                             <template v-if="form.provider">
@@ -228,6 +228,21 @@
                                     </x-admin::form.control-group>
                                 </template>
 
+                                <x-admin::form.control-group v-if="form.provider === 'zhipu' || form.provider === 'zhipu_code_plan'">
+                                    <x-admin::form.control-group.label>
+                                        @lang('admin::app.configuration.platform.fields.reasoning-effort')
+                                    </x-admin::form.control-group.label>
+                                    <select
+                                        v-model="form.reasoning_effort"
+                                        class="w-full py-2.5 px-3 border rounded-md text-sm text-gray-600 dark:text-gray-300 dark:bg-cherry-800 dark:border-cherry-800"
+                                    >
+                                        <option value="low">@lang('admin::app.configuration.platform.fields.reasoning-low')</option>
+                                        <option value="high">@lang('admin::app.configuration.platform.fields.reasoning-high')</option>
+                                        <option value="max">@lang('admin::app.configuration.platform.fields.reasoning-max')</option>
+                                    </select>
+                                    <p class="mt-1 text-xs text-gray-500">@lang('admin::app.configuration.platform.fields.reasoning-hint')</p>
+                                </x-admin::form.control-group>
+
                                 <!-- Models Selection -->
                                 <x-admin::form.control-group>
                                     <x-admin::form.control-group.label class="required">
@@ -292,6 +307,33 @@
                                     <x-admin::form.control-group.error control-name="models" />
                                 </x-admin::form.control-group>
 
+                                <div class="mb-4 rounded border p-3 dark:border-cherry-800" v-if="selectedModels.length">
+                                    <p class="mb-2 text-sm font-semibold text-gray-800 dark:text-white">
+                                        @lang('admin::app.configuration.platform.model-test-title')
+                                    </p>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <select
+                                            v-model="testModel"
+                                            class="min-w-[220px] flex-1 py-2 px-3 border rounded-md text-sm text-gray-600 dark:text-gray-300 dark:bg-cherry-800 dark:border-cherry-800"
+                                        >
+                                            <option v-for="model in selectedModels" :key="model" :value="model">@{{ model }}</option>
+                                        </select>
+                                        <button type="button" class="secondary-button" :disabled="testingModel" @click="testModelAvailability()">
+                                            <span v-if="testingModel">@lang('admin::app.configuration.platform.testing')...</span>
+                                            <span v-else>@lang('admin::app.configuration.platform.test-model')</span>
+                                        </button>
+                                    </div>
+                                    <div
+                                        v-if="modelTestResult"
+                                        class="mt-3 rounded p-2 text-xs"
+                                        :class="modelTestResult.success ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'"
+                                    >
+                                        <p v-text="modelTestResult.message"></p>
+                                        <p v-if="modelTestResult.reply" class="mt-1 break-words">@lang('admin::app.configuration.platform.model-reply'): @{{ modelTestResult.reply }}</p>
+                                        <p v-if="modelTestResult.elapsed_ms" class="mt-1">@lang('admin::app.configuration.platform.model-elapsed'): @{{ modelTestResult.elapsed_ms }} ms</p>
+                                    </div>
+                                </div>
+
                                 <!-- Default & Status -->
                                 <div class="grid grid-cols-2 gap-4">
                                     <x-admin::form.control-group>
@@ -334,9 +376,13 @@
                         isEditing: false,
                         saving: false,
                         fetchingModels: false,
+                        testingModel: false,
                         fetchError: '',
+                        modelTestResult: null,
+                        testModel: '',
                         customModel: '',
                         modelSearch: '',
+                        lastProvider: '',
                         selectedModels: [],
                         fetchedModels: [],
                         hasOtherDefault: {{ $hasDefault ? 'true' : 'false' }},
@@ -349,6 +395,7 @@
                             api_key: '',
                             azure_deployment: 'gpt-4o',
                             azure_api_version: '2024-10-21',
+                            reasoning_effort: 'low',
                             is_default: false,
                             status: true,
                         },
@@ -409,13 +456,17 @@
                         this.form = {
                             id: null, label: '', provider: '', api_url: '', api_key: '',
                             azure_deployment: 'gpt-4o', azure_api_version: '2024-10-21',
+                            reasoning_effort: 'low',
                             is_default: false, status: true,
                         };
                         this.selectedModels = [];
                         this.fetchedModels = [];
+                        this.lastProvider = '';
                         this.customModel = '';
                         this.modelSearch = '';
                         this.fetchError = '';
+                        this.testModel = '';
+                        this.modelTestResult = null;
                     },
 
                     onProviderChange(value = null) {
@@ -429,15 +480,19 @@
                             }
                         }
 
-                        if (!this.isEditing) {
+                        if (!this.isEditing || this.form.provider !== this.lastProvider) {
                             this.form.label = this.providerLabels[this.form.provider] || this.form.provider;
                         }
+                        this.lastProvider = this.form.provider;
                         this.selectedModels = [];
                         this.fetchedModels = [];
+                        this.testModel = '';
+                        this.modelTestResult = null;
                         this.form.api_url = this.providerDefaultUrls[this.form.provider] || '';
                         if (this.form.provider === 'zhipu_code_plan') {
                             this.fetchedModels = ['glm-5.3-flash', 'glm-5.3', 'glm-5.2'];
                             this.selectedModels = ['glm-5.3-flash'];
+                            this.testModel = 'glm-5.3-flash';
                         }
                         this.fetchError = '';
                     },
@@ -484,6 +539,7 @@
                                 if (!this.selectedModels.length) {
                                     this.selectedModels = models.slice(0, 3);
                                 }
+                                this.testModel = this.selectedModels[0] || '';
                             }
 
                             if (!models.length) {
@@ -514,11 +570,68 @@
                             this.selectedModels.push(model);
                         }
 
+                        if (!this.testModel) {
+                            this.testModel = model;
+                        }
+
                         this.customModel = '';
                     },
 
                     removeModel(index) {
+                        const removed = this.selectedModels[index];
                         this.selectedModels.splice(index, 1);
+                        if (this.testModel === removed) {
+                            this.testModel = this.selectedModels[0] || '';
+                        }
+                    },
+
+                    buildExtras() {
+                        if (this.form.provider === 'azure') {
+                            return {
+                                deployment: this.form.azure_deployment,
+                                api_version: this.form.azure_api_version,
+                            };
+                        }
+
+                        if (this.form.provider === 'zhipu' || this.form.provider === 'zhipu_code_plan') {
+                            return {
+                                thinking: { type: 'enabled' },
+                                reasoning_effort: this.form.reasoning_effort || 'low',
+                            };
+                        }
+
+                        return {};
+                    },
+
+                    async testModelAvailability() {
+                        if (!this.testModel || this.testingModel) {
+                            return;
+                        }
+
+                        this.testingModel = true;
+                        this.modelTestResult = null;
+
+                        try {
+                            const response = await this.$axios.post(
+                                "{{ route('admin.magic_ai.platform.test_model') }}",
+                                {
+                                    id: this.form.id || undefined,
+                                    provider: this.form.provider,
+                                    api_url: this.form.api_url || undefined,
+                                    api_key: this.form.api_key || undefined,
+                                    model: this.testModel,
+                                    extras: JSON.stringify(this.buildExtras()),
+                                }
+                            );
+                            this.modelTestResult = response.data;
+                        } catch (error) {
+                            this.modelTestResult = {
+                                success: false,
+                                message: error.response?.data?.message || "@lang('admin::app.configuration.platform.message.model-test-fail')",
+                            };
+                        } finally {
+                            this.testingModel = false;
+                        }
                     },
 
                     async saveWithTest(params, { resetForm, setErrors }) {
@@ -536,11 +649,9 @@
                         // input's DOM value (Vue :value binding can lag for dynamically-added checkboxes).
                         saveData.set('models', this.selectedModels.join(','));
 
-                        if (this.form.provider === 'azure') {
-                            saveData.set('extras', JSON.stringify({
-                                deployment: this.form.azure_deployment,
-                                api_version: this.form.azure_api_version,
-                            }));
+                        const extras = this.buildExtras();
+                        if (Object.keys(extras).length) {
+                            saveData.set('extras', JSON.stringify(extras));
                         }
 
                         // Verify credentials with upstream before persisting (Issue #760).
@@ -554,6 +665,7 @@
                                 testForm.set('api_url', this.form.api_url || '');
                                 testForm.set('api_key', this.form.api_key || '');
                                 testForm.set('models', this.selectedModels.join(','));
+                                testForm.set('extras', JSON.stringify(extras));
                                 const testResponse = await this.$axios.post(
                                     "{{ route('admin.magic_ai.platform.test') }}",
                                     testForm
@@ -643,9 +755,13 @@
                                 api_url: data.api_url || '', api_key: data.api_key || '',
                                 azure_deployment: extras.deployment || 'gpt-4o',
                                 azure_api_version: extras.api_version || '2024-10-21',
+                                reasoning_effort: extras.reasoning_effort || 'low',
                                 is_default: data.is_default, status: data.status,
                             };
+                            this.lastProvider = data.provider;
                             this.selectedModels = data.models ? data.models.split(',').map(m => m.trim()).filter(m => m) : [];
+                            this.testModel = this.selectedModels[0] || '';
+                            this.modelTestResult = null;
                             this.fetchedModels = [];
                             this.$refs.platformModal.toggle();
                             this.fetchModels();

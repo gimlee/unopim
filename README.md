@@ -137,7 +137,7 @@ UnoPim is engineered for high-volume catalogues. Read [how UnoPim scales to hand
 
 - **Multi-Currency**
 
-  CNY-based Frankfurter updates and conversion are described in [Exchange rates](docs/exchange-rates.md).
+  CNY-based Frankfurter updates and conversion are described in [Exchange rates](docs/exchange-rates.md). Local pipeline connectivity is described in [Product Info Management integration](docs/product-info-management-integration.md).
   Support for multiple currencies.
 
   <p><img src="https://raw.githubusercontent.com/unopim/temp-media/main/multi-currency-support.png" alt="Multi-Currency Support" width="720"></p>

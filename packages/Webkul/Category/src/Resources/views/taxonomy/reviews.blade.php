@@ -45,11 +45,16 @@
 
         <div class="overflow-x-auto">
             <table class="w-full text-sm">
-                <thead><tr class="border-b dark:border-cherry-700 text-left text-gray-500"><th class="py-2">SKU</th><th>当前建议类目</th><th>方法</th><th>置信度</th><th>状态</th><th>操作</th></tr></thead>
+                <thead><tr class="border-b dark:border-cherry-700 text-left text-gray-500"><th class="py-2">SKU / 商品名称</th><th>当前建议类目</th><th>方法</th><th>置信度</th><th>状态</th><th>操作</th></tr></thead>
                 <tbody>
                 @forelse ($assignments as $assignment)
                     <tr class="border-b dark:border-cherry-800">
-                        <td class="py-2.5"><a class="text-blue-600" href="{{ route('admin.catalog.products.edit', $assignment->product_id) }}">{{ $assignment->product->sku }}</a></td>
+                        <td class="py-2.5">
+                            <a class="font-medium text-blue-600" href="{{ route('admin.catalog.products.edit', $assignment->product_id) }}">{{ $assignment->product->sku }}</a>
+                            <div class="mt-1 max-w-[360px] text-xs text-gray-500" title="{{ $assignment->product->taxonomy_display_name }}">
+                                {{ $assignment->product->taxonomy_display_name }}
+                            </div>
+                        </td>
                         <td>{{ $assignment->category->source_path ?: $assignment->category->name }}<br><span class="font-mono text-xs text-gray-500">{{ $assignment->category->code }}</span></td>
                         <td>{{ $assignment->method }}</td>
                         <td>{{ $assignment->confidence === null ? '-' : number_format((float) $assignment->confidence * 100, 0).'%' }}</td>
@@ -70,7 +75,7 @@
                                     <div class="flex items-center justify-between border-b p-4 dark:border-cherry-700">
                                         <div>
                                             <h2 class="text-base font-semibold">修改并确认商品主类目</h2>
-                                            <p class="mt-1 text-xs text-gray-500">SKU：{{ $assignment->product->sku }}</p>
+                                            <p class="mt-1 text-xs text-gray-500">SKU：{{ $assignment->product->sku }} · {{ $assignment->product->taxonomy_display_name }}</p>
                                         </div>
                                         <form method="dialog"><button class="text-xl text-gray-500" type="submit" aria-label="关闭">×</button></form>
                                     </div>

@@ -15,6 +15,8 @@ use Webkul\Category\Models\CategorySourceMapping;
 use Webkul\Category\Models\PlatformCategory;
 use Webkul\Category\Models\PlatformTaxonomy;
 use Webkul\Category\Models\ProductCategoryAssignment;
+use Webkul\Product\Contracts\VariantValueResolver;
+use Webkul\Product\Models\Product;
 
 class TaxonomyController extends Controller
 {
@@ -153,7 +155,10 @@ class TaxonomyController extends Controller
         $status = trim((string) $request->query('status', 'proposed'));
         $type = trim((string) $request->query('type', ''));
         $search = trim((string) $request->query('search', ''));
-        $query = ProductCategoryAssignment::with(['product', 'category'])->latest();
+        $parentAssignments = fn () => ProductCategoryAssignment::query()
+            ->where('role', 'primary')
+            ->whereHas('product', fn ($product) => $product->whereNull('parent_id'));
+        $query = $parentAssignments()->with(['product', 'category'])->latest();
         if ($status !== '') {
             $query->where('status', $status);
         }
@@ -173,15 +178,34 @@ class TaxonomyController extends Controller
             });
         }
 
+        $assignments = $query->paginate($this->perPage($request, 100))->withQueryString();
+        $products = $assignments->getCollection()->pluck('product')->filter();
+        $resolvedValues = app(VariantValueResolver::class)->resolveBatch(
+            $products->map(fn (Product $product): array => [
+                'id'        => $product->id,
+                'parent_id' => $product->parent_id,
+                'values'    => $product->values,
+            ])
+        );
+        $products->each(function (Product $product) use ($resolvedValues): void {
+            $product->setAttribute('taxonomy_display_name', Product::displayNameFromValues(
+                $resolvedValues[$product->id] ?? ($product->values ?: []),
+                core()->getRequestedChannelCode(),
+                core()->getRequestedLocaleCode(),
+                $product->sku,
+            ));
+        });
+
         return view('category::taxonomy.reviews', [
-            'assignments' => $query->paginate($this->perPage($request, 100))->withQueryString(),
+            'assignments' => $assignments,
             'stats'       => [
-                'proposed'      => ProductCategoryAssignment::where('status', 'proposed')->count(),
-                'confirmed'     => ProductCategoryAssignment::where('status', 'confirmed')->count(),
-                'rejected'      => ProductCategoryAssignment::where('status', 'rejected')->count(),
-                'uncategorized' => ProductCategoryAssignment::where('status', 'proposed')
+                'proposed'      => $parentAssignments()->where('status', 'proposed')->distinct()->count('product_id'),
+                'confirmed'     => $parentAssignments()->where('status', 'confirmed')->distinct()->count('product_id'),
+                'rejected'      => $parentAssignments()->where('status', 'rejected')->distinct()->count('product_id'),
+                'uncategorized' => $parentAssignments()->where('status', 'proposed')
                     ->whereHas('category', fn ($category) => $category->where('code', 'std_uncategorized'))
-                    ->count(),
+                    ->distinct()
+                    ->count('product_id'),
             ],
         ]);
     }

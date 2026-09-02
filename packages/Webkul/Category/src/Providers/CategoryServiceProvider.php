@@ -39,7 +39,10 @@ class CategoryServiceProvider extends ServiceProvider
         });
 
         View::composer('category::taxonomy.product-panel', function ($view): void {
-            $product = $view->getData()['product'];
+            $editedProduct = $view->getData()['product'];
+            $product = $editedProduct->parent_id
+                ? $editedProduct->parent()->firstOrFail()
+                : $editedProduct;
             $primary = ProductCategoryAssignment::query()
                 ->where('product_id', $product->id)
                 ->where('role', 'primary')
@@ -63,6 +66,7 @@ class CategoryServiceProvider extends ServiceProvider
                 ->values();
 
             $view->with([
+                'product'                  => $product,
                 'selectedStandardCategory' => $primary?->category?->code
                     ?: data_get($product->values, 'categories.0', ''),
                 'selectedPlatformCategory' => $platformAssignment?->platformCategory?->external_id ?: '',

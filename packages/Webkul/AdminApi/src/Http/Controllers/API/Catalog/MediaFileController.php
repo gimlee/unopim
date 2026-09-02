@@ -12,6 +12,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Validation\Validator;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Webkul\AdminApi\Http\Controllers\API\ApiController;
 use Webkul\AdminApi\Http\Requests\Catalog\StoreCategoryMediaRequest;
 use Webkul\AdminApi\Http\Requests\Catalog\StoreProductMediaRequest;
@@ -22,6 +23,7 @@ use Webkul\Attribute\Repositories\AttributeRepository;
 use Webkul\Category\Repositories\CategoryRepository;
 use Webkul\Category\Validator\Catalog\CategoryMediaValidator;
 use Webkul\Core\Filesystem\FileStorer;
+use Webkul\Core\Rules\FileOrImageValidValue;
 use Webkul\Product\Models\Product;
 use Webkul\Product\Repositories\ProductRepository;
 use Webkul\Product\Validator\API\UploadMediaValidator;
@@ -42,6 +44,33 @@ class MediaFileController extends ApiController
         protected AttributeOptionRepository $attributeOptionRepository,
         protected AttributeRepository $attributeRepository,
     ) {}
+
+    /**
+     * Download a product media object through the authenticated REST API.
+     *
+     * Integrations must not resolve UnoPIM's storage directory on the local
+     * filesystem. Only product media paths and upload-approved extensions are
+     * exposed, and traversal segments are rejected before touching Storage.
+     */
+    public function downloadProductMedia(): StreamedResponse
+    {
+        $path = ltrim(str_replace('\\', '/', trim((string) request()->query('path'))), '/');
+        $segments = explode('/', $path);
+
+        abort_if($path === '' || str_contains($path, "\0"), Response::HTTP_NOT_FOUND);
+        abort_if(collect($segments)->contains(fn (string $segment): bool => in_array($segment, ['', '.', '..'], true)), Response::HTTP_NOT_FOUND);
+        abort_unless(($segments[0] ?? null) === 'product', Response::HTTP_NOT_FOUND);
+
+        $extensions = array_map('strtolower', array_merge(
+            FileOrImageValidValue::IMAGE_ALLOWED_EXTENSIONS,
+            FileOrImageValidValue::VIDEO_ALLOWED_EXTENSIONS,
+            FileOrImageValidValue::FILE_ALLOWED_EXTENSION,
+        ));
+        abort_unless(in_array(strtolower((string) pathinfo($path, PATHINFO_EXTENSION)), $extensions, true), Response::HTTP_FORBIDDEN);
+        abort_unless(Storage::exists($path), Response::HTTP_NOT_FOUND);
+
+        return Storage::download($path, basename($path));
+    }
 
     /**
      * Handles the storage of media files for products.

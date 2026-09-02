@@ -51,4 +51,18 @@ return [
         'allowed_tenants' => env('MICROSOFT_SSO_ALLOWED_TENANTS', ''),
     ],
 
+    'product_info_management' => [
+        'base_url' => env('PRODUCT_INFO_MANAGEMENT_BASE_URL', 'http://127.0.0.1:8020'),
+        'api_token' => env('PRODUCT_INFO_MANAGEMENT_API_TOKEN'),
+        'timeout' => (int) env('PRODUCT_INFO_MANAGEMENT_TIMEOUT', 300),
+
+        // Credentials accepted by this UnoPIM service from the PIM pipeline.
+        'unopim_client' => [
+            'id'       => env('PIM_UNOPIM_CLIENT_ID'),
+            'secret'   => env('PIM_UNOPIM_CLIENT_SECRET'),
+            'username' => env('PIM_UNOPIM_USERNAME'),
+            'password' => env('PIM_UNOPIM_PASSWORD'),
+        ],
+    ],
+
 ];

@@ -34,6 +34,7 @@ use Webkul\Core\Rules\Sku;
 use Webkul\Product\Contracts\Product as ProductContract;
 use Webkul\Product\Contracts\ProductAssociation as ProductAssociationContract;
 use Webkul\Product\Contracts\VariantStructurePlanner;
+use Webkul\Product\Contracts\VariantValueResolver;
 use Webkul\Product\Helpers\ProductType;
 use Webkul\Product\Jobs\MassDeleteProducts;
 use Webkul\Product\Jobs\MassUpdateProductsStatus;
@@ -86,6 +87,7 @@ class ProductController extends Controller
         protected ProductAssociationRepository $productAssociationRepository,
         protected VariantStructureRepository $variantStructureRepository,
         protected VariantStructurePlanner $variantStructurePlanner,
+        protected VariantValueResolver $variantValueResolver,
         protected RequiredAttributesValidator $requiredAttributesValidator,
     ) {}
 
@@ -438,8 +440,9 @@ class ProductController extends Controller
         $imageAttributes = $configurable->getImageAttributes();
         $channelCode = $channel?->code;
         $localeCode = $locale?->code;
+        $parentImagePath = $parent->getProductDisplayImage($channelCode, $localeCode, $imageAttributes);
 
-        $options = $paginator->getCollection()->map(function (Product $child) use ($axes, $isGroupList, $labelsByCode, $completenessByProduct, $leafTotals, $leafComplete, $imageAttributes, $channelCode, $localeCode) {
+        $options = $paginator->getCollection()->map(function (Product $child) use ($axes, $isGroupList, $labelsByCode, $completenessByProduct, $leafTotals, $leafComplete, $imageAttributes, $channelCode, $localeCode, $parentImagePath) {
             $axisValues = [];
 
             foreach ($axes as $axisCode) {
@@ -451,6 +454,8 @@ class ProductController extends Controller
             $label = $axisValues ? implode(', ', $axisValues) : $child->sku;
 
             $imagePath = $child->getProductDisplayImage($channelCode, $localeCode, $imageAttributes);
+            $imageInherited = ! $imagePath && $parentImagePath;
+            $imagePath ??= $parentImagePath;
 
             return [
                 'id'              => $child->id,
@@ -458,6 +463,7 @@ class ProductController extends Controller
                 'label'           => $label,
                 'sku'             => $child->sku,
                 'image'           => $imagePath ? Storage::url($imagePath) : null,
+                'image_inherited' => (bool) $imageInherited,
                 'completeness'    => $isGroupList ? null : (isset($completenessByProduct[$child->id]) ? (int) $completenessByProduct[$child->id] : null),
                 'variantTotal'    => $isGroupList ? (int) ($leafTotals[$child->id] ?? 0) : null,
                 'variantComplete' => $isGroupList ? (int) ($leafComplete[$child->id] ?? 0) : null,
@@ -470,6 +476,109 @@ class ProductController extends Controller
             'page'     => $paginator->currentPage(),
             'lastPage' => $paginator->lastPage(),
             'total'    => $paginator->total(),
+        ]);
+    }
+
+    /**
+     * Return every simple leaf below a configurable for the Products list.
+     *
+     * UnoPIM supports both configurable -> simple and configurable ->
+     * variant_group -> simple structures. The response deliberately flattens
+     * both shapes because the list drawer represents sellable SKUs, not the
+     * internal grouping nodes used by the variant editor.
+     */
+    public function variations(int $configurableId): JsonResponse
+    {
+        $configurable = ProductProxy::modelClass()::query()
+            ->with(['super_attributes.translations', 'attribute_family'])
+            ->findOrFail($configurableId);
+
+        abort_unless($configurable->type === 'configurable', 404);
+
+        $groupIds = ProductProxy::modelClass()::query()
+            ->where('parent_id', $configurable->id)
+            ->where('type', 'variant_group')
+            ->pluck('id');
+
+        $variations = ProductProxy::modelClass()::query()
+            ->where('type', 'simple')
+            ->where(function ($query) use ($configurable, $groupIds): void {
+                $query->where('parent_id', $configurable->id);
+
+                if ($groupIds->isNotEmpty()) {
+                    $query->orWhereIn('parent_id', $groupIds);
+                }
+            })
+            ->orderBy('id')
+            ->get();
+
+        $resolvedValues = $this->variantValueResolver->resolveBatch(
+            $variations->map(fn (Product $variation) => [
+                'id'        => $variation->id,
+                'parent_id' => $variation->parent_id,
+                'values'    => $variation->values,
+            ])
+        );
+
+        $channelCode = core()->getRequestedChannelCode();
+        $localeCode = core()->getRequestedLocaleCode();
+        $axisCodes = $configurable->super_attributes->pluck('code')->values()->all();
+        $imageAttributes = $configurable->getImageAttributes();
+        $parentImagePath = $configurable->getProductDisplayImage($channelCode, $localeCode, $imageAttributes);
+
+        $records = $variations->map(function (Product $variation) use ($resolvedValues, $channelCode, $localeCode, $axisCodes, $imageAttributes, $parentImagePath): array {
+            $values = $resolvedValues[$variation->id] ?? ($variation->values ?: []);
+            $common = (array) ($values['common'] ?? []);
+            $localized = (array) data_get($values, "channel_locale_specific.$channelCode.$localeCode", []);
+            $prices = $localized['price'] ?? [];
+            $price = is_array($prices)
+                ? collect($prices)->map(fn ($amount, $currency) => $currency.' '.number_format((float) $amount, 2))->implode(' / ')
+                : trim((string) $prices);
+
+            if ($price === '' && isset($common['source_price_cny'])) {
+                $price = 'CNY '.number_format((float) $common['source_price_cny'], 2);
+            }
+
+            $imagePath = null;
+            foreach ($imageAttributes as $attribute) {
+                if ($imagePath = $attribute->getValueFromProductValues($values, $channelCode, $localeCode)) {
+                    break;
+                }
+            }
+
+            $ownImagePath = null;
+            $ownValues = $variation->values ?: [];
+            foreach ($imageAttributes as $attribute) {
+                if ($ownImagePath = $attribute->getValueFromProductValues($ownValues, $channelCode, $localeCode)) {
+                    break;
+                }
+            }
+
+            $imagePath ??= $parentImagePath;
+            $imageInherited = ! $ownImagePath && $imagePath;
+
+            return [
+                'id'           => (int) $variation->id,
+                'sku'          => $variation->sku,
+                'name'         => Product::displayNameFromValues($values, $channelCode, $localeCode, $variation->sku),
+                'type'         => $variation->type,
+                'status'       => (bool) $variation->status,
+                'stock'        => (int) ($common['Inventory'] ?? 0),
+                'price'        => $price ?: '-',
+                'options'      => collect($axisCodes)
+                    ->filter(fn (string $code): bool => isset($common[$code]) && trim((string) $common[$code]) !== '')
+                    ->mapWithKeys(fn (string $code): array => [$code => (string) $common[$code]])
+                    ->all(),
+                'image'        => $imagePath ? Storage::url($imagePath) : null,
+                'image_inherited' => (bool) $imageInherited,
+                'updated_at'   => optional($variation->updated_at)->format('Y-m-d H:i:s'),
+                'redirect_url' => route('admin.catalog.products.edit', $variation->id),
+            ];
+        })->values();
+
+        return new JsonResponse([
+            'records' => $records,
+            'total'   => $records->count(),
         ]);
     }
 

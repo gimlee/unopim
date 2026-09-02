@@ -109,6 +109,7 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
         Route::get('', 'index')->name('admin.magic_ai.platform.index');
         Route::post('', 'store')->name('admin.magic_ai.platform.store');
         Route::post('test-connection', 'testConnection')->name('admin.magic_ai.platform.test');
+        Route::post('test-model', 'testModel')->name('admin.magic_ai.platform.test_model');
         Route::post('fetch-models', 'fetchModels')->name('admin.magic_ai.platform.fetch_models');
         Route::get('{id}', 'edit')->name('admin.magic_ai.platform.edit');
         Route::put('{id}', 'update')->name('admin.magic_ai.platform.update');

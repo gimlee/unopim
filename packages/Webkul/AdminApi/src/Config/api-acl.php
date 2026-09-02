@@ -175,6 +175,11 @@ return [
 
     // Product media uploads — require edit permission
     [
+        'key'   => 'api.catalog.products',
+        'name'  => 'admin::app.acl.products',
+        'route' => 'admin.api.media-files.download',
+        'sort'  => 2,
+    ], [
         'key'   => 'api.catalog.products.edit',
         'name'  => 'admin::app.acl.edit',
         'route' => 'admin.api.media-files.product.store',

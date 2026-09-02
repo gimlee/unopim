@@ -15,6 +15,7 @@ use Laravel\Passport\Passport;
 use Webkul\AdminApi\Cache\StructureCache;
 use Webkul\AdminApi\Console\ApiClientCommand;
 use Webkul\AdminApi\Console\PassportKeysCommand;
+use Webkul\AdminApi\Console\PimIntegrationProvisionCommand;
 use Webkul\AdminApi\Http\Middleware\DeprecatedRoute;
 use Webkul\AdminApi\Http\Middleware\EnsureAcceptsJson;
 use Webkul\AdminApi\Http\Middleware\LocaleMiddleware;
@@ -196,6 +197,7 @@ class AdminApiServiceProvider extends ServiceProvider
             $this->commands([
                 ApiClientCommand::class,
                 PassportKeysCommand::class,
+                PimIntegrationProvisionCommand::class,
             ]);
         }
     }

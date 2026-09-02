@@ -1,5 +1,8 @@
 <?php
 
+use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Http;
+use Webkul\MagicAI\Enums\AiProvider;
 use Webkul\MagicAI\Models\MagicAIPlatform;
 
 beforeEach(function () {
@@ -9,6 +12,62 @@ beforeEach(function () {
 it('should return the platform index page', function () {
     $this->get(route('admin.magic_ai.platform.index'))
         ->assertOk();
+});
+
+it('tests whether a selected Zhipu model can actually answer', function () {
+    Http::fake([
+        '*/chat/completions' => Http::response([
+            'choices' => [[
+                'message'       => ['role' => 'assistant', 'content' => 'MODEL_OK'],
+                'finish_reason' => 'stop',
+            ]],
+            'usage' => ['prompt_tokens' => 1, 'completion_tokens' => 1, 'total_tokens' => 2],
+        ]),
+    ]);
+
+    $this->postJson(route('admin.magic_ai.platform.test_model'), [
+        'provider' => AiProvider::Zhipu->value,
+        'api_key'  => 'zhipu-test-key',
+        'api_url'  => AiProvider::Zhipu->defaultUrl(),
+        'model'    => 'glm-5.3-flash',
+        'extras'   => json_encode(['reasoning_effort' => 'low']),
+    ])
+        ->assertOk()
+        ->assertJsonPath('success', true)
+        ->assertJsonPath('reply', 'MODEL_OK')
+        ->assertJsonPath('model', 'glm-5.3-flash');
+
+    Http::assertSent(function (Request $request): bool {
+        $body = $request->data();
+
+        return str_ends_with($request->url(), '/chat/completions')
+            && ($body['model'] ?? null) === 'glm-5.3-flash'
+            && data_get($body, 'thinking.type') === 'enabled'
+            && ($body['reasoning_effort'] ?? null) === 'low';
+    });
+});
+
+it('shows the upstream Zhipu business error when a model test is restricted', function () {
+    Http::fake([
+        '*/chat/completions' => Http::response([
+            'error' => [
+                'code'    => '1313',
+                'message' => '当前使用模式不符合公平使用策略。',
+            ],
+        ], 429),
+    ]);
+
+    $this->postJson(route('admin.magic_ai.platform.test_model'), [
+        'provider' => AiProvider::ZhipuCodePlan->value,
+        'api_key'  => 'zhipu-test-key',
+        'api_url'  => AiProvider::ZhipuCodePlan->defaultUrl(),
+        'model'    => 'glm-5.3-flash',
+        'extras'   => json_encode(['reasoning_effort' => 'low']),
+    ])
+        ->assertStatus(429)
+        ->assertJsonPath('success', false)
+        ->assertJsonPath('model', 'glm-5.3-flash')
+        ->assertJsonPath('message', trans('admin::app.configuration.platform.message.model-test-fail').': HTTP 429 / 1313: 当前使用模式不符合公平使用策略。');
 });
 
 it('should return the platform DataGrid as JSON for AJAX requests', function () {

@@ -117,6 +117,16 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
 
         $queryBuilder = $this->prepareQuery->getQueryManager();
 
+        // The catalog is presented as one row per sellable product model.
+        // Child simple products remain editable, but are loaded on demand in
+        // the parent's Variations drawer instead of appearing as duplicate
+        // top-level rows.
+        if (! request()->boolean('export') && empty(request()->input('productIds'))) {
+            $queryBuilder
+                ->whereNull('products.parent_id')
+                ->where('products.type', 'configurable');
+        }
+
         $queryBuilder->leftJoin('attribute_family_translations as attribute_family_name', function ($join) {
             $join->on('attribute_family_name.attribute_family_id', '=', 'af.id')
                 ->where('attribute_family_name.locale', '=', core()->getRequestedLocaleCode());

@@ -9,7 +9,8 @@ AI 分类入口复用“配置 → Magic AI → 平台”。系统只发送商�
 智谱配置：
 
 - 业务分类使用“智谱 AI（通用 API）”，地址为 `https://open.bigmodel.cn/api/paas/v4`。
-- “智谱 Code Plan（仅编码工具）”地址为 `https://open.bigmodel.cn/api/coding/paas/v4`，预置 `glm-5.3-flash`、`glm-5.3`、`glm-5.2`，默认 `glm-5.3-flash`。
+- “智谱 Code Plan（仅编码工具）”地址为 `https://open.bigmodel.cn/api/coding/paas/v4`，仅供智谱支持的编码工具使用，不进入商品 AI 分类平台列表。
+- 商品分类使用智谱通用 OpenAI 兼容端点，可在 Magic AI 平台页测试指定模型是否能实际回答。GLM 5.x 思考深度支持 `low`、`high`、`max`，默认 `low`。
 - Code Plan 按智谱使用规则不参与商品分类；商品分类需使用通用 API Key。
 
 API Key 由 `magic_ai_platforms.api_key` 加密保存。不要将真实 Key 写入代码、SQL、文档或前端模板。

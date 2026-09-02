@@ -2,11 +2,13 @@
 
 namespace App\Providers;
 
+use Composer\CaBundle\CaBundle;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Facade;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\ParallelTesting;
 use Illuminate\Support\Facades\RateLimiter;
@@ -21,9 +23,29 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        $this->configureOutboundHttpCertificates();
+
         $this->configureRateLimiting();
 
         $this->configureParallelTesting();
+    }
+
+    /**
+     * Use Composer's maintained CA bundle for Laravel HTTP clients.
+     *
+     * Windows PHP installations commonly leave curl.cainfo/openssl.cafile
+     * empty. Guzzle then fails before reaching HTTPS providers with cURL 60,
+     * even though browsers and Python clients on the same machine work. The
+     * bundled CA file preserves certificate verification; it never disables
+     * TLS checks.
+     */
+    protected function configureOutboundHttpCertificates(): void
+    {
+        $caBundle = CaBundle::getSystemCaRootBundlePath();
+
+        if (is_string($caBundle) && is_file($caBundle)) {
+            Http::globalOptions(['verify' => $caBundle]);
+        }
     }
 
     /**

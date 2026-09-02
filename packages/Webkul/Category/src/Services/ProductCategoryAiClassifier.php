@@ -21,7 +21,7 @@ class ProductCategoryAiClassifier
     public function classify(Product $product, MagicAIPlatform $platform, string $model): array
     {
         if ($platform->provider === AiProvider::ZhipuCodePlan->value) {
-            throw new RuntimeException('智谱 Code Plan 仅允许用于官方支持的编码工具，商品 AI 分类请配置“智谱 AI（通用 API）”。');
+            throw new RuntimeException('智谱 Coding Plan 仅适用于官方支持的编码工具；商品 AI 分类请使用“智谱 AI（通用 API）”。');
         }
 
         if (! $platform->status) {
@@ -56,7 +56,7 @@ class ProductCategoryAiClassifier
             ->setPlatformId($platform->id)
             ->setModel($model)
             ->setTemperature(0.1)
-            ->setMaxTokens(800)
+            ->setMaxTokens(400)
             ->setSystemPrompt('你是电商商品类目审核助手。只能从用户提供的候选列表中选择叶子类目，不允许创造、改写或猜测任何 ID。')
             ->setPrompt(
                 '根据商品信息，从候选中分别选择一个最合适的 PIM 标准类目和 TikTok 类目。'

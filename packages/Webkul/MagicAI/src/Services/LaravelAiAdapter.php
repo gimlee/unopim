@@ -2,6 +2,7 @@
 
 namespace Webkul\MagicAI\Services;
 
+use Illuminate\Support\Arr;
 use Laravel\Ai\Image;
 use Laravel\Ai\Responses\AgentResponse;
 use Laravel\Ai\Responses\ImageResponse;
@@ -62,7 +63,10 @@ class LaravelAiAdapter implements LLMModelInterface, SupportsStructuredTranslati
         }
 
         if ($this->platform->extras && is_array($this->platform->extras)) {
-            return array_merge($overrides, $this->platform->extras);
+            return array_merge($overrides, Arr::except($this->platform->extras, [
+                'thinking',
+                'reasoning_effort',
+            ]));
         }
 
         return $overrides;
@@ -129,7 +133,34 @@ class LaravelAiAdapter implements LLMModelInterface, SupportsStructuredTranslati
             systemPrompt: $this->systemPrompt,
             temperature: $isReasoningModel ? null : $this->temperature,
             maxTokens: $isReasoningModel ? max($this->maxTokens, 16000) : $this->maxTokens,
+            providerOptions: $this->generationOptions(),
         );
+    }
+
+    /**
+     * Build GLM request-body options separately from provider connection config.
+     * Product classification defaults to low reasoning for the fastest valid
+     * response from current GLM 5.x models.
+     *
+     * @return array<string, mixed>
+     */
+    protected function generationOptions(): array
+    {
+        if (! in_array($this->aiProvider, [AiProvider::Zhipu, AiProvider::ZhipuCodePlan], true)) {
+            return [];
+        }
+
+        $extras = is_array($this->platform->extras) ? $this->platform->extras : [];
+        $effort = (string) ($extras['reasoning_effort'] ?? 'low');
+
+        if (! in_array($effort, ['low', 'high', 'max'], true)) {
+            $effort = 'low';
+        }
+
+        return [
+            'thinking'         => ['type' => 'enabled'],
+            'reasoning_effort' => $effort,
+        ];
     }
 
     /**

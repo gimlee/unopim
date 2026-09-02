@@ -32,10 +32,13 @@ class AiErrorResolver
         }
 
         if ($e instanceof RateLimitedException) {
+            $upstream = self::extractUpstreamBody($e);
             $retryAfter = method_exists($e, 'retryAfter') ? $e->retryAfter() : ($e->retryAfter ?? null);
-            $message = $retryAfter
-                ? trans('ai-agent::app.common.error-rate-limit-retry', ['seconds' => $retryAfter])
-                : trans('ai-agent::app.common.error-rate-limit');
+            $message = $upstream !== ''
+                ? $upstream
+                : ($retryAfter
+                    ? trans('ai-agent::app.common.error-rate-limit-retry', ['seconds' => $retryAfter])
+                    : trans('ai-agent::app.common.error-rate-limit'));
 
             return [
                 'message'  => $message,
@@ -123,7 +126,12 @@ class AiErrorResolver
                     foreach (['error.message', 'error', 'message', 'detail', 'detail.message'] as $path) {
                         $candidate = data_get($json, $path);
                         if (is_string($candidate) && trim($candidate) !== '') {
-                            return sprintf('HTTP %d: %s', $status, trim($candidate));
+                            $businessCode = data_get($json, 'error.code');
+                            $codeSuffix = is_scalar($businessCode) && ctype_digit((string) $businessCode)
+                                ? ' / '.$businessCode
+                                : '';
+
+                            return sprintf('HTTP %d%s: %s', $status, $codeSuffix, trim($candidate));
                         }
                     }
                 }

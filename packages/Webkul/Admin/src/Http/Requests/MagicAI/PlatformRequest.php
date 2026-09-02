@@ -16,6 +16,15 @@ class PlatformRequest extends FormRequest
         return bouncer()->hasPermission('ai-agent.platform');
     }
 
+    protected function prepareForValidation(): void
+    {
+        $provider = AiProvider::tryFrom((string) $this->input('provider'));
+
+        if ($provider && trim((string) $this->input('label')) === '') {
+            $this->merge(['label' => $provider->label()]);
+        }
+    }
+
     /**
      * Get the validation rules.
      *

@@ -40,7 +40,7 @@ class TaxonomySelectorController extends Controller
             $path = Category::query()
                 ->whereAncestorOf($selected, true)
                 ->whereIn('taxonomy_type', ['container', 'standard'])
-                ->where('code', '!=', 'std_catalog')
+                ->whereNotIn('code', ['root', 'std_catalog'])
                 ->orderBy('_lft')
                 ->get();
 
@@ -56,7 +56,7 @@ class TaxonomySelectorController extends Controller
         return response()->json([
             'options' => Category::query()
                 ->where('parent_id', $parentId)
-                ->where('taxonomy_type', 'standard')
+                ->whereIn('taxonomy_type', ['container', 'standard'])
                 ->where('status', 'active')
                 ->orderBy('sort_order')
                 ->orderBy('source_path')
@@ -123,7 +123,7 @@ class TaxonomySelectorController extends Controller
                 'selected_id' => $selected->id,
                 'options'     => Category::query()
                     ->where('parent_id', $parentId)
-                    ->where('taxonomy_type', 'standard')
+                    ->whereIn('taxonomy_type', ['container', 'standard'])
                     ->where('status', 'active')
                     ->orderBy('sort_order')
                     ->orderBy('source_path')
