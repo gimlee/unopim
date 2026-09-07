@@ -9,6 +9,7 @@ use Webkul\Category\Models\CategoryMapping;
 use Webkul\Category\Models\PlatformCategory;
 use Webkul\MagicAI\Enums\AiProvider;
 use Webkul\MagicAI\Models\MagicAIPlatform;
+use Webkul\MagicAI\Models\MagicAISystemPrompt;
 use Webkul\Product\Models\Product;
 
 class ProductCategoryAiClassifier
@@ -51,13 +52,17 @@ class ProductCategoryAiClassifier
                 'path'        => $item['path'],
             ])->values()->all(),
         ];
+        $systemPrompt = MagicAISystemPrompt::query()
+            ->where('purpose', 'category_classification')
+            ->where('is_enabled', true)
+            ->first();
 
         $response = magic_ai()
             ->setPlatformId($platform->id)
             ->setModel($model)
-            ->setTemperature(0.1)
-            ->setMaxTokens(400)
-            ->setSystemPrompt('你是电商商品类目审核助手。只能从用户提供的候选列表中选择叶子类目，不允许创造、改写或猜测任何 ID。')
+            ->setTemperature((float) ($systemPrompt?->temperature ?? 0.1))
+            ->setMaxTokens((int) ($systemPrompt?->max_tokens ?? 400))
+            ->setSystemPrompt($systemPrompt?->tone ?: '你是电商商品类目审核助手。只能从用户提供的候选列表中选择叶子类目，不允许创造、改写或猜测任何 ID。')
             ->setPrompt(
                 '根据商品信息，从候选中分别选择一个最合适的 PIM 标准类目和 TikTok 类目。'
                 ."只返回 JSON：{\"standard_category_code\":\"\",\"platform_category_external_id\":\"\",\"confidence\":0.0,\"reason\":\"\"}。\n"

@@ -7,7 +7,8 @@ it('ships appearance, email and debug as default system settings rows', function
         ->assertOk()
         ->assertSee(trans('admin::app.settings.appearance.title'))
         ->assertSee(trans('admin::app.settings.system-settings.email.title'))
-        ->assertSee(trans('admin::app.settings.system-settings.debug.title'));
+        ->assertSee(trans('admin::app.settings.system-settings.debug.title'))
+        ->assertDontSee(route('admin.settings.system.edit', 'system.content_policy'));
 
     // Appearance links to its own page; email/debug to the generic edit page.
     $this->get(route('admin.settings.system.index'))

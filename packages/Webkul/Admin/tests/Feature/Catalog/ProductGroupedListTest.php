@@ -214,6 +214,9 @@ it('shows SKU price ranges and hides redundant classification diagnostics on con
         ->and(str_contains($content, 'Category Classification Method'))->toBeFalse()
         ->and(str_contains($content, 'Category Classification Confidence'))->toBeFalse()
         ->and(str_contains($content, 'Category Classification Evidence'))->toBeFalse()
+        ->and(str_contains($content, '商品描述优化记录'))->toBeTrue()
+        ->and(str_contains($content, '商品描述优化模板'))->toBeTrue()
+        ->and(str_contains($content, 'product-description-ai:optimize'))->toBeTrue()
         ->and(str_contains($content, 'name="values[channel_locale_specific][default][en_US][price]'))->toBeFalse();
 });
 

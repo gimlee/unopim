@@ -14,6 +14,7 @@ use Webkul\MagicAI\Database\Factories\MagicAISystemPromptFactory;
 
 #[Fillable([
     'title',
+    'purpose',
     'tone',
     'max_tokens',
     'temperature',
@@ -46,7 +47,9 @@ class MagicAISystemPrompt extends Model implements HistoryAuditable, MagicAISyst
     {
         static::saving(function ($model): void {
             if ($model->is_enabled) {
-                static::where('id', '!=', $model->id)->update(['is_enabled' => false]);
+                static::where('purpose', $model->purpose ?: 'general')
+                    ->where('id', '!=', $model->id)
+                    ->update(['is_enabled' => false]);
             }
         });
     }

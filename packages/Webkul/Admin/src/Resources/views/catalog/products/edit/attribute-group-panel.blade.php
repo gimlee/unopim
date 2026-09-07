@@ -48,6 +48,7 @@
                     :completeness-attributes="$requiredAttributes"
                     :requirement-indicators="$attributeRequirements ?? []"
                     :locked-fields="($variantFieldLocks['locks'] ?? [])"
+                    :product-id="$product->id"
                     fieldsWrapper="values"
                 >
                 </x-admin::products.dynamic-attribute-fields>

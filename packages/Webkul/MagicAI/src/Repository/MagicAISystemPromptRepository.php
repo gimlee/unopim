@@ -20,18 +20,24 @@ class MagicAISystemPromptRepository extends Repository
      */
     public function getAllPromptOptions(): array
     {
-        return $this->all()->map(fn ($prompt): array => [
-            'id'         => $prompt->id,
-            'label'      => ucfirst((string) $prompt->title),
-            'is_enabled' => (bool) $prompt->is_enabled,
-        ])->toArray();
+        return $this->model->newQuery()
+            ->where('purpose', 'general')
+            ->get()
+            ->map(fn ($prompt): array => [
+                'id'         => $prompt->id,
+                'label'      => ucfirst((string) $prompt->title),
+                'is_enabled' => (bool) $prompt->is_enabled,
+            ])->toArray();
     }
 
     /**
      * Disable all enabled system prompts
      */
-    public function disableAllEnabledPrompts(): int
+    public function disableAllEnabledPrompts(string $purpose = 'general'): int
     {
-        return $this->model->where('is_enabled', true)->update(['is_enabled' => false]);
+        return $this->model
+            ->where('purpose', $purpose)
+            ->where('is_enabled', true)
+            ->update(['is_enabled' => false]);
     }
 }

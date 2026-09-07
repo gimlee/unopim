@@ -110,6 +110,19 @@ return [
         'sort'  => 3,
     ],
 
+    // Content policy — reuse product read/edit permissions
+    [
+        'key'   => 'api.catalog.products',
+        'name'  => '违禁词列表',
+        'route' => 'admin.api.content_policy.words',
+        'sort'  => 1,
+    ], [
+        'key'   => 'api.catalog.products.edit',
+        'name'  => 'AI 优化商品描述',
+        'route' => 'admin.api.content_policy.optimize',
+        'sort'  => 2,
+    ],
+
     // Products — PATCH maps to edit permission
     [
         'key'   => 'api.catalog.products.edit',

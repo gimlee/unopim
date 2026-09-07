@@ -23,7 +23,7 @@ class MagicAISystemPromptGrid extends DataGrid
     public function prepareQueryBuilder()
     {
         $queryBuilder = DB::table('magic_ai_system_prompts')
-            ->select('id', 'title', 'tone', 'max_tokens', 'temperature', 'is_enabled', 'created_at', 'updated_at');
+            ->select('id', 'title', 'purpose', 'tone', 'max_tokens', 'temperature', 'is_enabled', 'created_at', 'updated_at');
 
         return $queryBuilder;
     }
@@ -42,6 +42,28 @@ class MagicAISystemPromptGrid extends DataGrid
             'searchable' => true,
             'sortable'   => true,
             'filterable' => true,
+        ]);
+
+        $this->addColumn([
+            'index'      => 'purpose',
+            'label'      => '用途',
+            'type'       => 'dropdown',
+            'searchable' => false,
+            'sortable'   => true,
+            'filterable' => true,
+            'options'    => [
+                'type'   => 'basic',
+                'params' => ['options' => [
+                    ['label' => '通用对话', 'value' => 'general'],
+                    ['label' => 'AI 商品分类', 'value' => 'category_classification'],
+                    ['label' => '商品描述优化', 'value' => 'product_description'],
+                ]],
+            ],
+            'closure' => fn ($row): string => match ($row->purpose) {
+                'category_classification' => 'AI 商品分类',
+                'product_description'     => '商品描述优化',
+                default                   => '通用对话',
+            },
         ]);
 
         $this->addColumn([

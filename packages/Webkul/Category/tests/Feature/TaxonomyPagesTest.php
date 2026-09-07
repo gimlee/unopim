@@ -2,8 +2,8 @@
 
 use Illuminate\Support\Str;
 use Webkul\Category\Models\Category;
-use Webkul\Category\Models\CategoryMapping;
 use Webkul\Category\Models\CategoryClassificationRule;
+use Webkul\Category\Models\CategoryMapping;
 use Webkul\Category\Models\PlatformCategory;
 use Webkul\Category\Models\PlatformTaxonomy;
 use Webkul\Category\Models\ProductCategoryAssignment;
@@ -116,6 +116,9 @@ it('lets an admin save PIM and TikTok categories from a product page', function 
         ->assertSee('商品类目归属')
         ->assertSee('规则分类')
         ->assertSee('AI 分类')
+        ->assertSee('默认推荐')
+        ->assertSee('当前使用')
+        ->assertSee('人工分类')
         ->assertSee('v-taxonomy-cascader-template', false)
         ->assertSee("app.component('v-taxonomy-cascader'", false)
         ->assertSee('v-product-taxonomy-panel-template', false);

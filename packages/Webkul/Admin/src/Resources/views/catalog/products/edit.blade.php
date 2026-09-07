@@ -178,6 +178,10 @@
 
                     @include('admin::catalog.products.edit.categories', ['currentLocaleCode' => $currentLocale?->code, 'productCategories' => $product->resolvedValues()['categories'] ?? []])
 
+                    @include('admin::catalog.products.edit.content-policy-revisions', [
+                        'revisions' => $contentPolicyRevisions ?? collect(),
+                    ])
+
                     @if ($variantTree ?? null)
                         {!! view_render_event('unopim.admin.catalog.product.edit.form.types.' . $product->type . '.before', ['product' => $product]) !!}
 
@@ -210,6 +214,14 @@
 
         {!! view_render_event('unopim.admin.catalog.product.edit.form.after', ['product' => $product]) !!}
     </x-admin::form>
+
+    @if (bouncer()->hasPermission('catalog.products.edit') && bouncer()->hasPermission('ai-agent'))
+        @include('admin::catalog.products.edit.short-description-ai', [
+            'productId'  => $product->parent_id ?: $product->id,
+            'channelCode' => $currentChannel->code,
+            'localeCode' => $currentLocale?->code,
+        ])
+    @endif
 
     {!! view_render_event('unopim.admin.catalog.product.edit.after', ['product' => $product]) !!}
 

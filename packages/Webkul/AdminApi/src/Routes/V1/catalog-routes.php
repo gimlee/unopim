@@ -8,6 +8,7 @@ use Webkul\AdminApi\Http\Controllers\API\Catalog\AttributeGroupController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\CategoryController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\CategoryFieldController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ConfigurableProductController;
+use Webkul\AdminApi\Http\Controllers\API\Catalog\ContentPolicyController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\MediaFileController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\SimpleProductController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\VariantStructureController;
@@ -123,6 +124,12 @@ Route::group([
             Route::get('', 'getSwatchMedia')->name('admin.api.media-files.attribute.options.get');
             Route::delete('', 'deleteSwatchMedia')->name('admin.api.media-files.attribute.options.delete');
         });
+    });
+
+    /** Products API Routes */
+    Route::controller(ContentPolicyController::class)->prefix('content-policy')->group(function () {
+        Route::get('forbidden-words', 'words')->name('admin.api.content_policy.words');
+        Route::post('products/{sku}/optimize-description', 'optimize')->name('admin.api.content_policy.optimize');
     });
 
     /** Products API Routes */

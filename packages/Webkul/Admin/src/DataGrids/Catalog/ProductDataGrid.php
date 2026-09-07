@@ -267,7 +267,7 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                     $label = match ($row->taxonomy_method) {
                         'rule', 'source'       => '规则分类',
                         'ai', 'ai_reviewed'    => 'AI 分类',
-                        'manual'               => '手动分类',
+                        'manual'               => '人工分类',
                         default                => '未分类',
                     };
 

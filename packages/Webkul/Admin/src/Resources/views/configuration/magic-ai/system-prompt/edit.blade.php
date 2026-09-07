@@ -51,9 +51,26 @@
                         <x-admin::form.control-group.error control-name="title" />
                     </x-admin::form.control-group>
 
-                    <x-admin::form.control-group>
-                        <x-admin::form.control-group.label>
-                            @lang('admin::app.configuration.system-prompt.datagrid.status')
+                        <x-admin::form.control-group>
+                            <x-admin::form.control-group.label class="required">
+                                用途
+                            </x-admin::form.control-group.label>
+
+                            <select
+                                name="purpose"
+                                class="w-full rounded-md border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-700 dark:border-cherry-700 dark:bg-cherry-800 dark:text-white"
+                            >
+                                <option value="general" @selected(old('purpose', $prompt->purpose) === 'general')>通用对话</option>
+                                <option value="category_classification" @selected(old('purpose', $prompt->purpose) === 'category_classification')>AI 商品分类</option>
+                                <option value="product_description" @selected(old('purpose', $prompt->purpose) === 'product_description')>商品描述优化 / 描述模板</option>
+                            </select>
+
+                            <x-admin::form.control-group.error control-name="purpose" />
+                        </x-admin::form.control-group>
+
+                        <x-admin::form.control-group>
+                            <x-admin::form.control-group.label>
+                                @lang('admin::app.configuration.system-prompt.datagrid.status')
                         </x-admin::form.control-group.label>
 
                         <input type="hidden" name="is_enabled" value="0" />

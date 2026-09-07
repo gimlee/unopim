@@ -8,9 +8,11 @@ use Webkul\Admin\Http\Controllers\Catalog\AttributeGroupController;
 use Webkul\Admin\Http\Controllers\Catalog\AttributeOptionController;
 use Webkul\Admin\Http\Controllers\Catalog\CategoryController;
 use Webkul\Admin\Http\Controllers\Catalog\CategoryFieldController;
+use Webkul\Admin\Http\Controllers\Catalog\ForbiddenWordController;
 use Webkul\Admin\Http\Controllers\Catalog\Options\AjaxOptionsController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductBulkEditController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductController;
+use Webkul\Admin\Http\Controllers\Catalog\ProductDescriptionAiController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductGridViewController;
 use Webkul\Admin\Http\Middleware\EnsureChannelLocaleIsValid;
 
@@ -150,6 +152,17 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
         });
 
         /**
+         * Forbidden words routes.
+         */
+        Route::controller(ForbiddenWordController::class)->prefix('forbidden-words')->group(function () {
+            Route::get('', 'index')->name('admin.catalog.forbidden_words.index');
+            Route::post('', 'store')->name('admin.catalog.forbidden_words.store');
+            Route::get('{id}', 'show')->name('admin.catalog.forbidden_words.show');
+            Route::put('{id}', 'update')->name('admin.catalog.forbidden_words.update');
+            Route::delete('{id}', 'destroy')->name('admin.catalog.forbidden_words.destroy');
+        });
+
+        /**
          * Association types routes.
          */
         Route::controller(AssociationTypeController::class)->prefix('association-types')->group(function () {
@@ -222,6 +235,12 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
             Route::get('get/locale', 'getLocale')->name('admin.catalog.product.get_locale');
 
             Route::get('get/attributes', 'getAttribute')->name('admin.catalog.product.get_attribute');
+        });
+
+        Route::controller(ProductDescriptionAiController::class)->prefix('products/description-ai')->group(function () {
+            Route::get('templates', 'templates')->name('admin.catalog.products.description_ai.templates');
+            Route::put('templates/{id}', 'updateTemplate')->name('admin.catalog.products.description_ai.templates.update');
+            Route::post('{id}/optimize', 'optimize')->name('admin.catalog.products.description_ai.optimize');
         });
 
         Route::controller(ProductGridViewController::class)->prefix('products/grid-views')->group(function () {

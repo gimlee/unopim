@@ -8,6 +8,7 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -800,6 +801,30 @@ class ProductController extends Controller
             ? $this->configurablePriceSummary($product)
             : null;
 
+        $contentPolicyRevisions = collect();
+
+        if (Schema::hasTable('product_content_revisions')) {
+            $contentPolicyProductId = $product->parent_id ?: $product->id;
+            $contentPolicyRevisions = DB::table('product_content_revisions')
+                ->where('product_id', $contentPolicyProductId)
+                ->latest('id')
+                ->limit(10)
+                ->get()
+                ->map(function ($revision): object {
+                    $revision->matched_terms = is_array($revision->matched_terms)
+                        ? $revision->matched_terms
+                        : (json_decode($revision->matched_terms ?: '[]', true) ?: []);
+                    $revision->original_content = is_array($revision->original_content)
+                        ? $revision->original_content
+                        : (json_decode($revision->original_content ?: '{}', true) ?: []);
+                    $revision->optimized_content = is_array($revision->optimized_content)
+                        ? $revision->optimized_content
+                        : (json_decode($revision->optimized_content ?: '{}', true) ?: []);
+
+                    return $revision;
+                });
+        }
+
         $family = $product->attribute_family;
 
         $lazyGroups = $family->attributeCount() > (int) config('product_editor.lazy_group_threshold');
@@ -834,6 +859,7 @@ class ProductController extends Controller
             'variantFieldLocks',
             'productEditorHiddenAttributeCodes',
             'configurablePriceSummary',
+            'contentPolicyRevisions',
             'lazyGroups',
             'renderGroups',
             'groupAttributes',

@@ -47,9 +47,20 @@
             </div>
 
             <div class="grid gap-4 lg:grid-cols-2">
-                <div class="rounded border border-gray-200 p-4 dark:border-cherry-700">
+                <div
+                    class="rounded border p-4"
+                    :class="currentMethod === 'rule'
+                        ? 'border-orange-400 bg-orange-50/60 dark:border-orange-500 dark:bg-orange-950/20'
+                        : 'border-gray-200 dark:border-cherry-700'"
+                >
+                    <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
+                        <div class="flex items-center gap-2">
+                            <h3 class="text-sm font-semibold text-gray-800 dark:text-white">规则分类</h3>
+                            <span class="rounded bg-gray-100 px-2 py-0.5 text-[11px] text-gray-500 dark:bg-cherry-800 dark:text-gray-300">不推荐</span>
+                        </div>
+                        <span v-if="currentMethod === 'rule'" class="rounded bg-orange-500 px-2 py-0.5 text-[11px] font-semibold text-white">当前使用</span>
+                    </div>
                     <div class="mb-3">
-                        <h3 class="text-sm font-semibold text-gray-800 dark:text-white">规则分类</h3>
                         <p class="mt-1 text-xs text-gray-500">使用 1688 来源类目映射、类目别名和本地分类规则，不调用外部模型。</p>
                     </div>
                     <classification-result :result="caches.rule" empty-text="尚未执行规则分类"></classification-result>
@@ -62,10 +73,19 @@
                     </div>
                 </div>
 
-                <div class="rounded border border-gray-200 p-4 dark:border-cherry-700">
+                <div
+                    class="rounded border p-4"
+                    :class="currentMethod === 'ai'
+                        ? 'border-primary-500 bg-primary-50/60 dark:border-primary-500 dark:bg-primary-950/20'
+                        : 'border-gray-200 dark:border-cherry-700'"
+                >
                     <div class="mb-3 flex flex-wrap items-start justify-between gap-2">
                         <div>
-                            <h3 class="text-sm font-semibold text-gray-800 dark:text-white">AI 分类</h3>
+                            <div class="flex items-center gap-2">
+                                <h3 class="text-sm font-semibold text-gray-800 dark:text-white">AI 分类</h3>
+                                <span class="rounded bg-primary-100 px-2 py-0.5 text-[11px] font-semibold text-primary-700 dark:bg-primary-900/40 dark:text-primary-300">默认推荐</span>
+                                <span v-if="currentMethod === 'ai'" class="rounded bg-primary-600 px-2 py-0.5 text-[11px] font-semibold text-white">当前使用</span>
+                            </div>
                             <p class="mt-1 text-xs text-gray-500">模型只能从本地预筛选的候选类目中选择。</p>
                         </div>
                         <a href="{{ route('admin.magic_ai.platform.index') }}" class="text-xs text-primary-600">Magic AI 配置</a>
@@ -91,7 +111,7 @@
             </div>
 
             <div class="rounded bg-gray-50 px-4 py-3 text-xs text-gray-600 dark:bg-cherry-800 dark:text-gray-300">
-                当前分类类型：<span class="font-semibold" v-text="methodLabel(currentMethod)"></span>。规则与 AI 结果分别缓存；清除缓存不会删除当前已应用类目。
+                当前使用：<span class="font-semibold" v-text="methodLabel(currentMethod)"></span>。规则与 AI 结果分别缓存；缓存存在不代表正在使用，清除缓存也不会删除当前已应用类目。
             </div>
 
             <div class="flex justify-end">
@@ -160,7 +180,7 @@
                 },
 
                 methodLabel(method) {
-                    return { rule: '规则分类', ai: 'AI 分类', manual: '手动分类', unclassified: '未分类' }[method] || '未分类';
+                    return { rule: '规则分类', ai: 'AI 分类', manual: '人工分类', unclassified: '未分类' }[method] || '未分类';
                 },
 
                 setResult(method, result) {

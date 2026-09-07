@@ -67,6 +67,21 @@ return [
         'sort'  => 3,
     ], [
         'key'   => 'catalog.products.edit',
+        'name'  => '商品描述 AI 优化',
+        'route' => 'admin.catalog.products.description_ai.templates',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
+        'name'  => '商品描述 AI 优化',
+        'route' => 'admin.catalog.products.description_ai.templates.update',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
+        'name'  => '商品描述 AI 优化',
+        'route' => 'admin.catalog.products.description_ai.optimize',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
         'name'  => 'admin::app.acl.edit',
         'route' => 'admin.catalog.products.attribute_groups',
         'sort'  => 3,
@@ -130,6 +145,31 @@ return [
         'name'  => 'admin::app.acl.products',
         'route' => 'admin.catalog.categories.tree',
         'sort'  => 1,
+    ], [
+        'key'   => 'catalog.forbidden_words',
+        'name'  => '违禁词',
+        'route' => 'admin.catalog.forbidden_words.index',
+        'sort'  => 4,
+    ], [
+        'key'   => 'catalog.forbidden_words.create',
+        'name'  => '新增',
+        'route' => 'admin.catalog.forbidden_words.store',
+        'sort'  => 1,
+    ], [
+        'key'   => 'catalog.forbidden_words.edit',
+        'name'  => '编辑',
+        'route' => 'admin.catalog.forbidden_words.show',
+        'sort'  => 2,
+    ], [
+        'key'   => 'catalog.forbidden_words.edit',
+        'name'  => '编辑',
+        'route' => 'admin.catalog.forbidden_words.update',
+        'sort'  => 2,
+    ], [
+        'key'   => 'catalog.forbidden_words.delete',
+        'name'  => '删除',
+        'route' => 'admin.catalog.forbidden_words.destroy',
+        'sort'  => 3,
     ], [
         'key'   => 'catalog.categories',
         'name'  => 'admin::app.acl.categories',

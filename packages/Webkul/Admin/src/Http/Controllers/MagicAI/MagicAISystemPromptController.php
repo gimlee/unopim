@@ -4,6 +4,7 @@ namespace Webkul\Admin\Http\Controllers\MagicAI;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Webkul\Admin\DataGrids\MagicAI\MagicAISystemPromptGrid;
 use Webkul\Admin\Http\Controllers\Controller;
@@ -38,6 +39,7 @@ class MagicAISystemPromptController extends Controller
     {
         $this->validate(request(), [
             'title'       => 'required',
+            'purpose'     => ['required', Rule::in(['general', 'category_classification', 'product_description'])],
             'tone'        => 'required',
             'is_enabled'  => 'required|boolean',
             'max_tokens'  => 'required|integer|min:1|max:32768',
@@ -46,6 +48,7 @@ class MagicAISystemPromptController extends Controller
 
         $data = request()->only([
             'title',
+            'purpose',
             'tone',
             'is_enabled',
             'max_tokens',
@@ -53,7 +56,7 @@ class MagicAISystemPromptController extends Controller
         ]);
 
         if ($data['is_enabled']) {
-            $this->magicAiSystemPromptRepository->disableAllEnabledPrompts();
+            $this->magicAiSystemPromptRepository->disableAllEnabledPrompts($data['purpose']);
         }
 
         $this->magicAiSystemPromptRepository->create($data);
@@ -80,13 +83,14 @@ class MagicAISystemPromptController extends Controller
     {
         $this->validate(request(), [
             'title'       => 'required',
+            'purpose'     => ['required', Rule::in(['general', 'category_classification', 'product_description'])],
             'tone'        => 'required',
             'is_enabled'  => 'required|boolean',
             'max_tokens'  => 'required|integer|min:1|max:32768',
             'temperature' => 'required|numeric|between:0,2',
         ]);
 
-        $data = request()->only(['title', 'tone', 'is_enabled', 'max_tokens', 'temperature']);
+        $data = request()->only(['title', 'purpose', 'tone', 'is_enabled', 'max_tokens', 'temperature']);
 
         $id = request()->id;
 
