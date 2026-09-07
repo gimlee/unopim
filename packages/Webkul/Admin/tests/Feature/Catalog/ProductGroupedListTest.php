@@ -3,6 +3,9 @@
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Str;
 use Webkul\Admin\DataGrids\Catalog\ProductDataGrid;
+use Webkul\Attribute\Models\Attribute;
+use Webkul\Attribute\Models\AttributeFamily;
+use Webkul\Attribute\Models\AttributeGroup;
 use Webkul\Category\Models\Category;
 use Webkul\Category\Models\ProductCategoryAssignment;
 use Webkul\Product\Models\Product;
@@ -84,7 +87,10 @@ it('flattens direct and grouped simple leaves in the configurable variations end
         'sku'    => 'VARIATIONS-'.Str::upper(Str::random(8)),
         'values' => [
             'channel_locale_specific' => [
-                'default' => ['en_US' => ['name' => 'Parent display name']],
+                'default' => ['en_US' => [
+                    'name'  => 'Parent display name',
+                    'price' => ['CNY' => 999],
+                ]],
             ],
             'common' => [
                 'source_price_cny' => 15,
@@ -101,13 +107,23 @@ it('flattens direct and grouped simple leaves in the configurable variations end
         'type'      => 'simple',
         'parent_id' => $parent->id,
         'sku'       => $parent->sku.'-DIRECT',
-        'values'    => ['common' => ['Inventory' => 7]],
+        'values'    => [
+            'common'                  => ['Inventory' => 7],
+            'channel_locale_specific' => [
+                'default' => ['zh_CN' => ['price' => ['CNY' => 12.5, 'MYR' => 8.25]]],
+            ],
+        ],
     ]);
     $nested = Product::factory()->create([
         'type'      => 'simple',
         'parent_id' => $group->id,
         'sku'       => $parent->sku.'-NESTED',
-        'values'    => ['common' => ['Inventory' => 9]],
+        'values'    => [
+            'common'                  => ['Inventory' => 9],
+            'channel_locale_specific' => [
+                'default' => ['zh_CN' => ['price' => ['CNY' => 20, 'MYR' => 13.2]]],
+            ],
+        ],
     ]);
 
     $response = $this->getJson(route('admin.catalog.products.variations', $parent->id))
@@ -120,8 +136,85 @@ it('flattens direct and grouped simple leaves in the configurable variations end
         ->toContain($direct->id, $nested->id)
         ->and($records->firstWhere('id', $nested->id)['name'])->toBe('Parent display name')
         ->and($records->firstWhere('id', $direct->id)['stock'])->toBe(7)
+        ->and($records->firstWhere('id', $direct->id)['price'])->toBe('CNY 12.50 / MYR 8.25')
+        ->and($records->firstWhere('id', $nested->id)['prices'])->toMatchArray(['CNY' => 20, 'MYR' => 13.2])
         ->and($records->firstWhere('id', $direct->id)['image'])->toContain('product/test/parent-main.jpg')
         ->and($records->firstWhere('id', $direct->id)['image_inherited'])->toBeTrue();
+});
+
+it('shows SKU price ranges and hides redundant classification diagnostics on configurable edit pages', function () {
+    $this->loginAsAdmin();
+
+    $family = AttributeFamily::factory()->create();
+    $group = AttributeGroup::factory()->create(['code' => 'source_data_'.Str::lower(Str::random(6))]);
+    $family->familyGroups()->attach($group);
+    $mapping = $family->attributeFamilyGroupMappings()->first();
+
+    $attributes = collect([
+        ['code' => 'price', 'type' => 'price', 'label' => 'Price'],
+        ['code' => 'category_classification_status', 'type' => 'text', 'label' => 'Category Classification Status'],
+        ['code' => 'category_classification_method', 'type' => 'text', 'label' => 'Category Classification Method'],
+        ['code' => 'category_classification_confidence', 'type' => 'text', 'label' => 'Category Classification Confidence'],
+        ['code' => 'category_classification_evidence', 'type' => 'textarea', 'label' => 'Category Classification Evidence'],
+    ])->map(function (array $definition, int $position) use ($mapping): Attribute {
+        $attribute = Attribute::query()->where('code', $definition['code'])->first()
+            ?? Attribute::factory()->create([
+                'code' => $definition['code'],
+                'type' => $definition['type'],
+            ]);
+        $attribute->translateOrNew('en_US')->name = $definition['label'];
+        $attribute->save();
+        $mapping->customAttributes()->attach($attribute, ['position' => $position + 1]);
+
+        return $attribute;
+    });
+
+    $parent = Product::factory()->create([
+        'type'                => 'configurable',
+        'attribute_family_id' => $family->id,
+        'sku'                 => 'PRICE-SUMMARY-'.Str::upper(Str::random(8)),
+        'values'              => [
+            'channel_locale_specific' => [
+                'default' => ['en_US' => ['price' => ['CNY' => 999]]],
+            ],
+            'common' => [
+                'category_classification_status'     => 'classified',
+                'category_classification_method'     => 'ai',
+                'category_classification_confidence' => '0.99',
+                'category_classification_evidence'   => 'hidden evidence',
+            ],
+        ],
+    ]);
+
+    foreach ([12.5, 20] as $index => $amount) {
+        Product::factory()->create([
+            'type'                => 'simple',
+            'attribute_family_id' => $family->id,
+            'parent_id'           => $parent->id,
+            'sku'                 => $parent->sku.'-'.($index + 1),
+            'values'              => [
+                'channel_locale_specific' => [
+                    'default' => ['zh_CN' => ['price' => ['CNY' => $amount]]],
+                ],
+            ],
+        ]);
+    }
+
+    $response = $this->get(route('admin.catalog.products.edit', $parent->id))->assertOk();
+    $content = $response->getContent();
+
+    expect($attributes)->toHaveCount(5)
+        ->and(str_contains($content, 'SKU 价格'))->toBeTrue()
+        ->and(str_contains($content, 'CNY(人民币)'))->toBeTrue()
+        ->and(str_contains($content, '12.50'))->toBeTrue()
+        ->and(str_contains($content, '20.00'))->toBeTrue()
+        ->and(str_contains($content, $parent->sku.'-1'))->toBeTrue()
+        ->and(str_contains($content, $parent->sku.'-2'))->toBeTrue()
+        ->and(str_contains($content, 'Category Classification Status'))->toBeFalse()
+        ->and(str_contains($content, 'Category Classification Method'))->toBeFalse()
+        ->and(str_contains($content, 'Category Classification Confidence'))->toBeFalse()
+        ->and(str_contains($content, 'Category Classification Evidence'))->toBeFalse()
+        ->and(str_contains($content, 'name="values[channel_locale_specific][default][en_US][price]'))->toBeFalse();
 });
 
 it('renders the expandable variations component on the Products page', function () {

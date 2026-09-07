@@ -4,6 +4,7 @@ namespace Webkul\Admin\Http\Controllers\Catalog;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
@@ -72,6 +73,17 @@ class ProductController extends Controller
      * may resolve to before it is used to filter children.
      */
     const VARIANT_CHILDREN_MAX_MATCHED_OPTIONS = 500;
+
+    /**
+     * Classification diagnostics remain persisted for rules, imports and APIs,
+     * but the dedicated "商品类目归属" panel is their only editor surface.
+     */
+    private const PRODUCT_EDITOR_HIDDEN_CLASSIFICATION_ATTRIBUTES = [
+        'category_classification_status',
+        'category_classification_method',
+        'category_classification_confidence',
+        'category_classification_evidence',
+    ];
 
     /**
      * Create a new controller instance.
@@ -495,6 +507,25 @@ class ProductController extends Controller
 
         abort_unless($configurable->type === 'configurable', 404);
 
+        $records = $this->configurableVariationRecords($configurable);
+
+        return new JsonResponse([
+            'records' => $records,
+            'total'   => $records->count(),
+        ]);
+    }
+
+    /**
+     * Flatten the sellable leaves of a configurable and resolve inherited
+     * values once. The same data powers both the Products drawer and the
+     * configurable price summary on the edit page.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function configurableVariationRecords(Product $configurable): Collection
+    {
+        $configurable->loadMissing(['super_attributes.translations', 'attribute_family']);
+
         $groupIds = ProductProxy::modelClass()::query()
             ->where('parent_id', $configurable->id)
             ->where('type', 'variant_group')
@@ -529,15 +560,16 @@ class ProductController extends Controller
         $records = $variations->map(function (Product $variation) use ($resolvedValues, $channelCode, $localeCode, $axisCodes, $imageAttributes, $parentImagePath): array {
             $values = $resolvedValues[$variation->id] ?? ($variation->values ?: []);
             $common = (array) ($values['common'] ?? []);
-            $localized = (array) data_get($values, "channel_locale_specific.$channelCode.$localeCode", []);
-            $prices = $localized['price'] ?? [];
-            $price = is_array($prices)
-                ? collect($prices)->map(fn ($amount, $currency) => $currency.' '.number_format((float) $amount, 2))->implode(' / ')
-                : trim((string) $prices);
+            // Prefer the leaf's own price in any locale before consulting the
+            // resolved ancestor chain. Otherwise a legacy fixed parent price
+            // under the administrator's current locale can mask a SKU-specific
+            // import price stored under zh_CN.
+            $prices = $this->variationPrices($variation->values ?: [], $channelCode, $localeCode);
 
-            if ($price === '' && isset($common['source_price_cny'])) {
-                $price = 'CNY '.number_format((float) $common['source_price_cny'], 2);
+            if ($prices === []) {
+                $prices = $this->variationPrices($values, $channelCode, $localeCode);
             }
+            $price = $this->formatVariationPrices($prices);
 
             $imagePath = null;
             foreach ($imageAttributes as $attribute) {
@@ -565,21 +597,117 @@ class ProductController extends Controller
                 'status'       => (bool) $variation->status,
                 'stock'        => (int) ($common['Inventory'] ?? 0),
                 'price'        => $price ?: '-',
+                'prices'       => $prices,
                 'options'      => collect($axisCodes)
                     ->filter(fn (string $code): bool => isset($common[$code]) && trim((string) $common[$code]) !== '')
                     ->mapWithKeys(fn (string $code): array => [$code => (string) $common[$code]])
                     ->all(),
-                'image'        => $imagePath ? Storage::url($imagePath) : null,
+                'image'           => $imagePath ? Storage::url($imagePath) : null,
                 'image_inherited' => (bool) $imageInherited,
-                'updated_at'   => optional($variation->updated_at)->format('Y-m-d H:i:s'),
-                'redirect_url' => route('admin.catalog.products.edit', $variation->id),
+                'updated_at'      => optional($variation->updated_at)->format('Y-m-d H:i:s'),
+                'redirect_url'    => route('admin.catalog.products.edit', $variation->id),
             ];
         })->values();
 
-        return new JsonResponse([
-            'records' => $records,
-            'total'   => $records->count(),
-        ]);
+        return $records;
+    }
+
+    /**
+     * Resolve a SKU's currency prices. Prefer the requested locale, then any
+     * locale in the requested channel, and finally any available channel. This
+     * is important for 1688 imports whose source values are commonly zh_CN
+     * while an administrator may currently be editing under en_US.
+     *
+     * @return array<string, float>
+     */
+    private function variationPrices(array $values, string $channelCode, string $localeCode): array
+    {
+        $candidate = data_get($values, "channel_locale_specific.$channelCode.$localeCode.price");
+
+        if (! is_array($candidate) || $candidate === []) {
+            foreach ((array) data_get($values, "channel_locale_specific.$channelCode", []) as $localeValues) {
+                if (is_array($localeValues) && is_array($localeValues['price'] ?? null) && $localeValues['price'] !== []) {
+                    $candidate = $localeValues['price'];
+
+                    break;
+                }
+            }
+        }
+
+        if (! is_array($candidate) || $candidate === []) {
+            foreach ((array) ($values['channel_locale_specific'] ?? []) as $channelValues) {
+                foreach ((array) $channelValues as $localeValues) {
+                    if (is_array($localeValues) && is_array($localeValues['price'] ?? null) && $localeValues['price'] !== []) {
+                        $candidate = $localeValues['price'];
+
+                        break 2;
+                    }
+                }
+            }
+        }
+
+        $prices = [];
+
+        foreach (is_array($candidate) ? $candidate : [] as $currency => $amount) {
+            if (! is_numeric($amount)) {
+                continue;
+            }
+
+            $prices[strtoupper((string) $currency)] = (float) $amount;
+        }
+
+        $sourcePrice = data_get($values, 'common.source_price_cny');
+
+        if ($prices === [] && is_numeric($sourcePrice)) {
+            $prices['CNY'] = (float) $sourcePrice;
+        }
+
+        ksort($prices);
+
+        return $prices;
+    }
+
+    /** @param array<string, float> $prices */
+    private function formatVariationPrices(array $prices): string
+    {
+        return collect($prices)
+            ->map(fn (float $amount, string $currency): string => $currency.' '.number_format($amount, 2))
+            ->implode(' / ');
+    }
+
+    /**
+     * @return array{variants: array<int, array<string, mixed>>, ranges: array<int, array<string, mixed>>}
+     */
+    private function configurablePriceSummary(Product $product): array
+    {
+        $variants = $this->configurableVariationRecords($product);
+        $amountsByCurrency = [];
+
+        foreach ($variants as $variant) {
+            foreach ($variant['prices'] as $currency => $amount) {
+                $amountsByCurrency[$currency][] = (float) $amount;
+            }
+        }
+
+        ksort($amountsByCurrency);
+
+        $ranges = collect($amountsByCurrency)
+            ->map(fn (array $amounts, string $currency): array => [
+                'currency' => $currency,
+                'min'      => min($amounts),
+                'max'      => max($amounts),
+            ])
+            ->values()
+            ->all();
+
+        return [
+            'variants' => $variants->map(fn (array $variant): array => [
+                'sku'    => $variant['sku'],
+                'price'  => $variant['price'],
+                'prices' => $variant['prices'],
+            ])->all(),
+            'ranges' => $ranges,
+        ];
     }
 
     /**
@@ -666,6 +794,12 @@ class ProductController extends Controller
 
         $variantFieldLocks = $this->buildVariantFieldLocks($product);
 
+        $productEditorHiddenAttributeCodes = $this->productEditorHiddenAttributeCodes($product, $variantFieldLocks);
+
+        $configurablePriceSummary = $product->type === 'configurable'
+            ? $this->configurablePriceSummary($product)
+            : null;
+
         $family = $product->attribute_family;
 
         $lazyGroups = $family->attributeCount() > (int) config('product_editor.lazy_group_threshold');
@@ -698,6 +832,8 @@ class ProductController extends Controller
             'associationTypes',
             'variantTree',
             'variantFieldLocks',
+            'productEditorHiddenAttributeCodes',
+            'configurablePriceSummary',
             'lazyGroups',
             'renderGroups',
             'groupAttributes',
@@ -752,7 +888,10 @@ class ProductController extends Controller
             'product'            => $product,
             'group'              => $group,
             'customAttributes'   => $product->getEditableAttributesForGroup((int) $group->id),
-            'variantHiddenCodes' => array_merge($variantAxisCodes, $variantFieldLocks['hidden'] ?? []),
+            'variantHiddenCodes' => array_values(array_unique(array_merge(
+                $variantAxisCodes,
+                $this->productEditorHiddenAttributeCodes($product, $variantFieldLocks)
+            ))),
             'variantFieldLocks'  => $variantFieldLocks,
             'currentLocale'      => core()->getRequestedLocale(),
             'currentChannel'     => core()->getRequestedChannel(),
@@ -767,6 +906,29 @@ class ProductController extends Controller
             'groupId'     => (int) $group->id,
             'nextGroupId' => $product->attribute_family->groupSummaryAfter($localeCode, (int) $group->position)?->id,
         ]);
+    }
+
+    /**
+     * Attributes intentionally omitted from the generic product attribute
+     * editor. The stored values are preserved when the rest of the form saves.
+     *
+     * @return array<int, string>
+     */
+    private function productEditorHiddenAttributeCodes(Product $product, ?array $variantFieldLocks): array
+    {
+        $hidden = array_merge(
+            self::PRODUCT_EDITOR_HIDDEN_CLASSIFICATION_ATTRIBUTES,
+            $variantFieldLocks['hidden'] ?? []
+        );
+
+        // A configurable has no single sellable price. Its parent-level value
+        // is retained as legacy/fallback data, while the UI displays leaf SKU
+        // prices and currency ranges instead.
+        if ($product->type === 'configurable') {
+            $hidden[] = 'price';
+        }
+
+        return array_values(array_unique($hidden));
     }
 
     /**
