@@ -3,9 +3,11 @@
 use Illuminate\Support\Str;
 use Webkul\Category\Models\Category;
 use Webkul\Category\Models\CategoryMapping;
+use Webkul\Category\Models\CategoryClassificationRule;
 use Webkul\Category\Models\PlatformCategory;
 use Webkul\Category\Models\PlatformTaxonomy;
 use Webkul\Category\Models\ProductCategoryAssignment;
+use Webkul\Category\Models\ProductCategoryClassificationCache;
 use Webkul\Category\Models\ProductPlatformCategoryAssignment;
 use Webkul\MagicAI\Enums\AiProvider;
 use Webkul\MagicAI\Models\MagicAIPlatform;
@@ -112,6 +114,7 @@ it('lets an admin save PIM and TikTok categories from a product page', function 
         ->get(route('admin.catalog.products.edit', $product->id))
         ->assertOk()
         ->assertSee('商品类目归属')
+        ->assertSee('规则分类')
         ->assertSee('AI 分类')
         ->assertSee('v-taxonomy-cascader-template', false)
         ->assertSee("app.component('v-taxonomy-cascader'", false)
@@ -135,6 +138,94 @@ it('lets an admin save PIM and TikTok categories from a product page', function 
         'platform_category_id' => $platform->id,
         'status'               => 'confirmed',
     ]);
+});
+
+it('caches and applies rule classification independently from AI results', function () {
+    $admin = Admin::query()->whereNotNull('role_id')->firstOrFail();
+    $suffix = Str::lower(Str::random(10));
+    $standard = Category::factory()->create([
+        'code'            => "rule-category-{$suffix}",
+        'taxonomy_type'   => 'standard',
+        'is_assignable'   => true,
+        'status'          => 'active',
+        'source_path'     => '测试类目 > 极光投影灯',
+        'additional_data' => ['locale_specific' => ['zh_CN' => ['name' => '极光投影灯']]],
+    ]);
+    CategoryClassificationRule::create([
+        'category_id' => $standard->id,
+        'rule_type'   => 'keyword',
+        'field'       => 'title',
+        'operator'    => 'contains',
+        'value'       => "唯一规则词{$suffix}",
+        'weight'      => 50,
+        'status'      => true,
+    ]);
+    $taxonomy = PlatformTaxonomy::create([
+        'code'     => "rule-tiktok-{$suffix}",
+        'platform' => 'tiktok',
+        'region'   => 'MY',
+        'version'  => "test-{$suffix}",
+        'status'   => 'active',
+    ]);
+    $platform = PlatformCategory::create([
+        'platform_taxonomy_id' => $taxonomy->id,
+        'external_id'          => "rule-platform-{$suffix}",
+        'name'                 => '投影灯',
+        'path'                 => '家居用品 > 灯具 > 投影灯',
+        'is_leaf'              => true,
+        'enabled'              => true,
+    ]);
+    CategoryMapping::create([
+        'category_id'          => $standard->id,
+        'platform_category_id' => $platform->id,
+        'mapping_type'         => 'exact',
+        'status'               => 'confirmed',
+        'confidence'           => 1,
+    ]);
+    $product = Product::factory()->configurable()->create([
+        'sku'    => "RULE-PRODUCT-{$suffix}",
+        'values' => [
+            'channel_locale_specific' => ['default' => ['zh_CN' => ['name' => "唯一规则词{$suffix} 商品"]]],
+            'common'                  => ['source_attributes' => '灯光 投影'],
+            'categories'              => [],
+        ],
+    ]);
+
+    $this->actingAs($admin, 'admin')
+        ->postJson(route('admin.catalog.products.taxonomy.rule-suggest', $product->id))
+        ->assertOk()
+        ->assertJsonPath('data.method', 'rule')
+        ->assertJsonPath('data.standard.value', $standard->code)
+        ->assertJsonPath('data.platform.value', $platform->external_id);
+
+    $this->assertDatabaseHas((new ProductCategoryClassificationCache)->getTable(), [
+        'product_id'           => $product->id,
+        'method'               => 'rule',
+        'standard_category_id' => $standard->id,
+        'platform_category_id' => $platform->id,
+    ]);
+
+    $this->actingAs($admin, 'admin')
+        ->postJson(route('admin.catalog.products.taxonomy.classification.apply', [$product->id, 'rule']))
+        ->assertOk()
+        ->assertJsonPath('data.status', 'applied');
+
+    expect(data_get($product->fresh()->values, 'categories.0'))->toBe($standard->code)
+        ->and(data_get($product->fresh()->values, 'common.category_classification_method'))->toBe('rule');
+    $this->assertDatabaseHas((new ProductPlatformCategoryAssignment)->getTable(), [
+        'product_id'           => $product->id,
+        'platform_category_id' => $platform->id,
+        'method'               => 'rule',
+    ]);
+
+    $this->actingAs($admin, 'admin')
+        ->deleteJson(route('admin.catalog.products.taxonomy.classification.clear', [$product->id, 'rule']))
+        ->assertOk();
+    $this->assertDatabaseMissing((new ProductCategoryClassificationCache)->getTable(), [
+        'product_id' => $product->id,
+        'method'     => 'rule',
+    ]);
+    expect(data_get($product->fresh()->values, 'categories.0'))->toBe($standard->code);
 });
 
 it('uses Zhipu general API and excludes Coding Plan from product classification', function () {

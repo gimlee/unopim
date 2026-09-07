@@ -11,4 +11,6 @@ Route::prefix('api/v1/rest/taxonomy')
         Route::get('status', 'status')->name('admin.api.taxonomy.status');
         Route::get('classifier', 'classifier')->name('admin.api.taxonomy.classifier');
         Route::get('resolve', 'resolve')->name('admin.api.taxonomy.resolve');
+        Route::post('products/{sku}/classify-ai', 'classifyProductWithAi')
+            ->name('admin.api.taxonomy.products.classify-ai');
     });

@@ -3,6 +3,8 @@
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Support\Str;
 use Webkul\Admin\DataGrids\Catalog\ProductDataGrid;
+use Webkul\Category\Models\Category;
+use Webkul\Category\Models\ProductCategoryAssignment;
 use Webkul\Product\Models\Product;
 
 uses(DatabaseTransactions::class);
@@ -35,6 +37,43 @@ it('lists only root configurable products and hides their simple children from t
     expect($records->pluck('product_id'))
         ->toContain($parent->id)
         ->not->toContain($child->id);
+});
+
+it('shows the current category path and classification type for root products', function () {
+    $this->loginAsAdmin();
+
+    $product = Product::factory()->create([
+        'type' => 'configurable',
+        'sku'  => 'CATEGORY-GRID-'.Str::upper(Str::random(8)),
+    ]);
+    $category = Category::factory()->create([
+        'code'          => 'category-grid-'.Str::lower(Str::random(8)),
+        'taxonomy_type' => 'standard',
+        'is_assignable' => true,
+        'status'        => 'active',
+        'source_path'   => '办公文化 > 办公文具 > 笔记本',
+    ]);
+    ProductCategoryAssignment::create([
+        'product_id'  => $product->id,
+        'category_id' => $category->id,
+        'role'        => 'primary',
+        'status'      => 'confirmed',
+        'method'      => 'ai',
+    ]);
+
+    request()->replace([
+        'pagination' => ['page' => 1, 'per_page' => 50],
+        'sort'       => ['column' => 'product_id', 'order' => 'desc'],
+        'filters'    => ['sku' => [$product->sku]],
+    ]);
+
+    $grid = app(ProductDataGrid::class);
+    $grid->prepare();
+    $record = collect(json_decode(json_encode($grid->formatData()['records']), true))
+        ->firstWhere('product_id', $product->id);
+
+    expect($record['primary_category'])->toContain('办公文化')
+        ->and($record['taxonomy_method'])->toContain('AI 分类');
 });
 
 it('flattens direct and grouped simple leaves in the configurable variations endpoint', function () {

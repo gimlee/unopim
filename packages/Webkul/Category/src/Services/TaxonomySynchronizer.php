@@ -362,6 +362,31 @@ class TaxonomySynchronizer
                     'taxonomy_version' => $definition['taxonomy_version'] ?? null,
                 ]
             );
+            if (in_array(($definition['method'] ?? ''), ['rule', 'source'], true)) {
+                $platformCategory = CategoryMapping::query()
+                    ->with('platformCategory.taxonomy')
+                    ->where('category_id', $category->id)
+                    ->where('status', 'confirmed')
+                    ->whereHas('platformCategory.taxonomy', fn ($query) => $query
+                        ->where('platform', 'tiktok')
+                        ->where('status', 'active'))
+                    ->orderByDesc('confidence')
+                    ->first()?->platformCategory;
+                resolve(ProductCategoryClassificationManager::class)->remember($product, 'rule', [
+                    'standard' => [
+                        'value' => $category->code,
+                        'path'  => $category->source_path ?: $category->name,
+                    ],
+                    'platform' => $platformCategory ? [
+                        'value' => $platformCategory->external_id,
+                        'path'  => $platformCategory->path,
+                    ] : null,
+                    'confidence' => $definition['confidence'] ?? null,
+                    'reason'     => implode('；', (array) ($definition['evidence'] ?? [])),
+                    'evidence'   => (array) ($definition['evidence'] ?? []),
+                    'provider'   => 'product-pipeline-rules',
+                ]);
+            }
             $count++;
         }
 

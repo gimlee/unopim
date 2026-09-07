@@ -13,6 +13,8 @@ use Webkul\Category\Models\PlatformCategory;
 use Webkul\Category\Models\ProductCategoryAssignment;
 use Webkul\Category\Models\ProductPlatformCategoryAssignment;
 use Webkul\Category\Services\ProductCategoryAiClassifier;
+use Webkul\Category\Services\ProductCategoryClassificationManager;
+use Webkul\Category\Services\ProductCategoryRuleClassifier;
 use Webkul\MagicAI\Models\MagicAIPlatform;
 use Webkul\Product\Models\Product;
 
@@ -26,7 +28,7 @@ class ProductTaxonomyController extends Controller
             'standard_category_code'        => ['required', 'string', 'exists:categories,code'],
             'platform'                      => ['required', Rule::in(['tiktok'])],
             'platform_category_external_id' => ['nullable', 'string', 'max:255'],
-            'method'                        => ['nullable', Rule::in(['manual', 'ai_reviewed'])],
+            'method'                        => ['nullable', Rule::in(['manual'])],
             'confidence'                    => ['nullable', 'numeric', 'between:0,1'],
             'reason'                        => ['nullable', 'string', 'max:500'],
         ]);
@@ -92,6 +94,15 @@ class ProductTaxonomyController extends Controller
 
             $values = $product->values ?: [];
             $values['categories'] = [$category->code];
+            $values['common'] = array_merge((array) ($values['common'] ?? []), [
+                'category_classification_status'     => 'confirmed',
+                'category_classification_method'     => 'manual',
+                'category_classification_confidence' => '1',
+                'category_classification_evidence'   => json_encode([
+                    'path'   => $category->source_path ?: $category->name,
+                    'reason' => $data['reason'] ?? '管理员手动选择',
+                ], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            ]);
             $product->values = $values;
             $product->save();
 
@@ -127,6 +138,7 @@ class ProductTaxonomyController extends Controller
     public function aiSuggest(
         Request $request,
         ProductCategoryAiClassifier $classifier,
+        ProductCategoryClassificationManager $manager,
         int $productId
     ): JsonResponse {
         abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
@@ -139,8 +151,53 @@ class ProductTaxonomyController extends Controller
         $product = $this->taxonomyProduct($productId);
         $platform = MagicAIPlatform::findOrFail($data['platform_id']);
         $result = $classifier->classify($product, $platform, $data['model']);
+        $cache = $manager->remember($product, 'ai', $result);
 
-        return response()->json(['data' => $result]);
+        return response()->json(['data' => $manager->present($cache)]);
+    }
+
+    public function ruleSuggest(
+        ProductCategoryRuleClassifier $classifier,
+        ProductCategoryClassificationManager $manager,
+        int $productId
+    ): JsonResponse {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+
+        $product = $this->taxonomyProduct($productId);
+        $cache = $manager->remember($product, 'rule', $classifier->classify($product));
+
+        return response()->json(['data' => $manager->present($cache)]);
+    }
+
+    public function applyClassification(
+        Request $request,
+        ProductCategoryClassificationManager $manager,
+        int $productId,
+        string $method
+    ): JsonResponse {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+        abort_unless(in_array($method, ['rule', 'ai'], true), 404);
+
+        $product = $this->taxonomyProduct($productId);
+        $cache = $manager->apply($product, $method, auth()->guard('admin')->id());
+
+        return response()->json([
+            'message' => $method === 'ai' ? 'AI 分类结果已应用。' : '规则分类结果已应用。',
+            'data'    => $manager->present($cache),
+        ]);
+    }
+
+    public function clearClassification(
+        ProductCategoryClassificationManager $manager,
+        int $productId,
+        string $method
+    ): JsonResponse {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+        abort_unless(in_array($method, ['rule', 'ai'], true), 404);
+
+        $manager->forget($this->taxonomyProduct($productId), $method);
+
+        return response()->json(['message' => '分类缓存已清除，可重新执行分类。']);
     }
 
     protected function taxonomyProduct(int $productId): Product

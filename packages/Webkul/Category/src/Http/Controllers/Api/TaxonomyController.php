@@ -8,6 +8,11 @@ use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Webkul\Category\Services\TaxonomySynchronizer;
 use Webkul\Category\Models\Category;
+use Webkul\Category\Services\ProductCategoryAiClassifier;
+use Webkul\Category\Services\ProductCategoryClassificationManager;
+use Webkul\MagicAI\Enums\AiProvider;
+use Webkul\MagicAI\Models\MagicAIPlatform;
+use Webkul\Product\Models\Product;
 
 class TaxonomyController extends Controller
 {
@@ -94,5 +99,54 @@ class TaxonomyController extends Controller
         return $result
             ? response()->json($result)
             : response()->json(['message' => 'No confirmed product assignment and platform category mapping found.'], 404);
+    }
+
+    public function classifyProductWithAi(
+        Request $request,
+        ProductCategoryAiClassifier $classifier,
+        ProductCategoryClassificationManager $manager,
+        string $sku
+    ): JsonResponse {
+        // Magic AI uses an HTTP timeout longer than PHP's CLI/server default.
+        // Keep this endpoint alive long enough to return the provider's real
+        // response or timeout instead of an unrelated 30-second fatal error.
+        set_time_limit(180);
+
+        $data = $request->validate([
+            'platform' => ['sometimes', 'in:tiktok'],
+            'region'   => ['sometimes', 'string', 'size:2'],
+        ]);
+        $product = Product::query()->where('sku', $sku)->firstOrFail();
+        $product = $product->parent ?: $product;
+        $platform = MagicAIPlatform::query()
+            ->where('status', true)
+            ->where('provider', '!=', AiProvider::ZhipuCodePlan->value)
+            ->orderByDesc('is_default')
+            ->orderBy('id')
+            ->get()
+            ->first(fn (MagicAIPlatform $candidate): bool => count($candidate->model_list) > 0);
+
+        if (! $platform) {
+            return response()->json([
+                'message' => '没有可用于商品分类的 Magic AI 平台；请先启用通用 AI 平台并配置模型。',
+            ], 422);
+        }
+
+        $model = collect($platform->model_list)
+            ->first(fn (string $name): bool => str_contains(strtolower($name), 'flash'))
+            ?: $platform->model_list[0];
+        $manager->remember($product, 'ai', $classifier->classify($product, $platform, $model));
+        $applied = $manager->apply($product, 'ai', null);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $manager->present($applied),
+            'meta'    => [
+                'platform' => $data['platform'] ?? 'tiktok',
+                'region'   => strtoupper($data['region'] ?? 'MY'),
+                'provider' => $platform->label,
+                'model'    => $model,
+            ],
+        ]);
     }
 }

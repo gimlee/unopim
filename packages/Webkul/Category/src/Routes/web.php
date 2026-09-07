@@ -14,7 +14,10 @@ Route::middleware(['web', 'admin'])
     ->controller(ProductTaxonomyController::class)
     ->group(function (): void {
         Route::put('', 'update')->whereNumber('productId')->name('admin.catalog.products.taxonomy.update');
+        Route::post('rule-suggest', 'ruleSuggest')->whereNumber('productId')->name('admin.catalog.products.taxonomy.rule-suggest');
         Route::post('ai-suggest', 'aiSuggest')->whereNumber('productId')->name('admin.catalog.products.taxonomy.ai-suggest');
+        Route::post('classification/{method}/apply', 'applyClassification')->whereNumber('productId')->whereIn('method', ['rule', 'ai'])->name('admin.catalog.products.taxonomy.classification.apply');
+        Route::delete('classification/{method}', 'clearClassification')->whereNumber('productId')->whereIn('method', ['rule', 'ai'])->name('admin.catalog.products.taxonomy.classification.clear');
     });
 
 Route::middleware(['web', 'admin'])

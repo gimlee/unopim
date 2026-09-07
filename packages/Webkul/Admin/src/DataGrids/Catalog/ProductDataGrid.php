@@ -58,6 +58,8 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
         'sku',
         'image',
         'name',
+        'primary_category',
+        'taxonomy_method',
         'attribute_family',
         'status',
         'type',
@@ -131,6 +133,12 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
             $join->on('attribute_family_name.attribute_family_id', '=', 'af.id')
                 ->where('attribute_family_name.locale', '=', core()->getRequestedLocaleCode());
         })
+            ->leftJoin('product_category_assignments as primary_category_assignment', function ($join) {
+                $join->on('primary_category_assignment.product_id', '=', 'products.id')
+                    ->where('primary_category_assignment.role', '=', 'primary')
+                    ->where('primary_category_assignment.status', '=', 'confirmed');
+            })
+            ->leftJoin('categories as primary_category_record', 'primary_category_record.id', '=', 'primary_category_assignment.category_id')
             ->select(
                 'products.sku',
                 'products.id as product_id',
@@ -150,6 +158,8 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                 ),
                 'products.values as raw_values',
                 'products.avg_completeness_score as completeness',
+                'primary_category_record.source_path as primary_category',
+                'primary_category_assignment.method as taxonomy_method',
             );
 
         return $queryBuilder;
@@ -232,6 +242,37 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                 'searchable' => false,
                 'filterable' => true,
                 'sortable'   => true,
+            ],
+
+            'primary_category' => [
+                'index'      => 'primary_category',
+                'label'      => '商品类目',
+                'type'       => 'string',
+                'searchable' => false,
+                'filterable' => false,
+                'sortable'   => false,
+                'closure'    => fn ($row) => $row->primary_category
+                    ? '<span class="break-words">'.e($row->primary_category).'</span>'
+                    : '<span class="label-info">未分类</span>',
+            ],
+
+            'taxonomy_method' => [
+                'index'      => 'taxonomy_method',
+                'label'      => '分类类型',
+                'type'       => 'string',
+                'searchable' => false,
+                'filterable' => false,
+                'sortable'   => false,
+                'closure'    => function ($row) {
+                    $label = match ($row->taxonomy_method) {
+                        'rule', 'source'       => '规则分类',
+                        'ai', 'ai_reviewed'    => 'AI 分类',
+                        'manual'               => '手动分类',
+                        default                => '未分类',
+                    };
+
+                    return '<span class="label-info">'.$label.'</span>';
+                },
             ],
 
             'type' => [

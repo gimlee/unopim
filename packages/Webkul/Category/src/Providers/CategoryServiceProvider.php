@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 use Webkul\Category\Models\CategoryProxy;
 use Webkul\Category\Models\ProductCategoryAssignment;
+use Webkul\Category\Models\ProductCategoryClassificationCache;
 use Webkul\Category\Models\ProductPlatformCategoryAssignment;
 use Webkul\Category\Observers\CategoryObserver;
 use Webkul\Category\Services\CategoryAdditionalDataMapper;
@@ -64,6 +65,13 @@ class CategoryServiceProvider extends ServiceProvider
                     'is_default' => $platform->is_default,
                 ])
                 ->values();
+            $classificationManager = resolve(\Webkul\Category\Services\ProductCategoryClassificationManager::class);
+            $classificationCaches = ProductCategoryClassificationCache::query()
+                ->with(['standardCategory', 'platformCategory'])
+                ->where('product_id', $product->id)
+                ->where('platform', 'tiktok')
+                ->get()
+                ->mapWithKeys(fn ($cache) => [$cache->method => $classificationManager->present($cache)]);
 
             $view->with([
                 'product'                  => $product,
@@ -71,6 +79,12 @@ class CategoryServiceProvider extends ServiceProvider
                     ?: data_get($product->values, 'categories.0', ''),
                 'selectedPlatformCategory' => $platformAssignment?->platformCategory?->external_id ?: '',
                 'aiPlatforms'              => $aiPlatforms,
+                'classificationCaches'     => $classificationCaches,
+                'currentClassificationMethod' => match ($primary?->method) {
+                    'rule', 'source' => 'rule',
+                    'ai', 'ai_reviewed' => 'ai',
+                    default => $primary ? 'manual' : 'unclassified',
+                },
             ]);
         });
     }
