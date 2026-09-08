@@ -118,6 +118,11 @@ return [
         'sort'  => 1,
     ], [
         'key'   => 'api.catalog.products.edit',
+        'name'  => '同步受管违禁词',
+        'route' => 'admin.api.content_policy.forbidden_words.sync',
+        'sort'  => 2,
+    ], [
+        'key'   => 'api.catalog.products.edit',
         'name'  => 'AI 优化商品描述',
         'route' => 'admin.api.content_policy.optimize',
         'sort'  => 2,
@@ -126,6 +131,16 @@ return [
         'name'  => '记录商品上架异常',
         'route' => 'admin.api.listing_exceptions.store',
         'sort'  => 2,
+    ], [
+        'key'   => 'api.settings',
+        'name'  => 'AI 系统提示词列表',
+        'route' => 'admin.api.magic_ai.system_prompts.index',
+        'sort'  => 4,
+    ], [
+        'key'   => 'api.settings',
+        'name'  => '同步 AI 系统提示词',
+        'route' => 'admin.api.magic_ai.system_prompts.sync',
+        'sort'  => 4,
     ],
 
     // Products — PATCH maps to edit permission

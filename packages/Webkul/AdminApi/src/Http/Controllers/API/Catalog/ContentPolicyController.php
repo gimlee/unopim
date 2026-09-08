@@ -4,6 +4,7 @@ namespace Webkul\AdminApi\Http\Controllers\API\Catalog;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Throwable;
 use Webkul\AdminApi\Http\Controllers\API\ApiController;
 use Webkul\AdminApi\Services\ProductContentPolicyService;
@@ -14,6 +15,55 @@ class ContentPolicyController extends ApiController
     public function words(ProductContentPolicyService $policy): JsonResponse
     {
         return response()->json(['data' => $policy->forbiddenWords()]);
+    }
+
+    public function sync(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'words'   => ['required', 'array'],
+            'words.*' => ['required', 'string', 'max:255'],
+        ]);
+
+        $added = 0;
+        $unchanged = 0;
+        $now = now();
+
+        foreach ($data['words'] as $rawWord) {
+            $term = trim((string) $rawWord);
+            if ($term === '') {
+                continue;
+            }
+            $normalized = mb_strtolower($term);
+
+            $exists = DB::table('content_policy_forbidden_words')
+                ->where('normalized_term', $normalized)
+                ->exists();
+
+            if (! $exists) {
+                DB::table('content_policy_forbidden_words')->insert([
+                    'term'            => $term,
+                    'normalized_term' => $normalized,
+                    'status'          => true,
+                    'notes'           => '系统受管违禁词',
+                    'created_at'      => $now,
+                    'updated_at'      => $now,
+                ]);
+                $added++;
+            } else {
+                $unchanged++;
+            }
+        }
+
+        $total = DB::table('content_policy_forbidden_words')->where('status', true)->count();
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'added'     => $added,
+                'unchanged' => $unchanged,
+                'total'     => $total,
+            ],
+        ]);
     }
 
     public function optimize(

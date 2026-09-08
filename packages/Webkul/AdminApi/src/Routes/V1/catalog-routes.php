@@ -13,6 +13,7 @@ use Webkul\AdminApi\Http\Controllers\API\Catalog\MediaFileController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ProductListingExceptionController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\SimpleProductController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\VariantStructureController;
+use Webkul\AdminApi\Http\Controllers\API\MagicAI\MagicAISystemPromptSyncController;
 
 Route::group([
     'middleware' => [
@@ -130,7 +131,13 @@ Route::group([
     /** Products API Routes */
     Route::controller(ContentPolicyController::class)->prefix('content-policy')->group(function () {
         Route::get('forbidden-words', 'words')->name('admin.api.content_policy.words');
+        Route::post('forbidden-words/sync', 'sync')->name('admin.api.content_policy.forbidden_words.sync');
         Route::post('products/{sku}/optimize-description', 'optimize')->name('admin.api.content_policy.optimize');
+    });
+
+    Route::controller(MagicAISystemPromptSyncController::class)->prefix('magic-ai/system-prompts')->group(function () {
+        Route::get('', 'index')->name('admin.api.magic_ai.system_prompts.index');
+        Route::post('sync', 'sync')->name('admin.api.magic_ai.system_prompts.sync');
     });
 
     Route::controller(ProductListingExceptionController::class)->prefix('listing-exceptions')->group(function () {
