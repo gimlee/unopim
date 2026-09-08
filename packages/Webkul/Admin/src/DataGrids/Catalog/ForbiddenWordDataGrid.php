@@ -35,6 +35,7 @@ class ForbiddenWordDataGrid extends DataGrid
             'index'      => 'status',
             'label'      => '状态',
             'type'       => 'boolean',
+            'searchable' => false,
             'filterable' => true,
             'sortable'   => true,
             'options'    => [
@@ -62,6 +63,7 @@ class ForbiddenWordDataGrid extends DataGrid
             'index'      => 'updated_at',
             'label'      => '更新时间',
             'type'       => 'datetime',
+            'searchable' => false,
             'filterable' => true,
             'sortable'   => true,
         ]);

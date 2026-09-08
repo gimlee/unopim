@@ -16,6 +16,25 @@ it('renders forbidden words as a catalog CRUD page', function () {
     expect(collect(config('menu.admin'))->pluck('key'))->toContain('catalog.forbidden_words');
 });
 
+it('returns datagrid records via ajax', function () {
+    $this->withHeaders(['X-Requested-With' => 'XMLHttpRequest'])
+        ->get(route('admin.catalog.forbidden_words.index'))
+        ->assertOk()
+        ->assertJsonStructure([
+            'records',
+            'columns',
+            'meta',
+        ]);
+
+    $this->getJson(route('admin.catalog.forbidden_words.index'))
+        ->assertOk()
+        ->assertJsonStructure([
+            'records',
+            'columns',
+            'meta',
+        ]);
+});
+
 it('creates updates and deletes a forbidden word case insensitively', function () {
     $created = $this->postJson(route('admin.catalog.forbidden_words.store'), [
         'term'   => 'ExampleMall',
