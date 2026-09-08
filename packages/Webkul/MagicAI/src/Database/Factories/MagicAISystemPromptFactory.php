@@ -16,6 +16,7 @@ class MagicAISystemPromptFactory extends Factory
     {
         return [
             'title'        => fake()->sentence,
+            'purpose'      => 'general',
             'tone'         => fake()->word,
             'max_tokens'   => fake()->numberBetween(50, 1000),
             'temperature'  => fake()->randomFloat(1, 0, 2),

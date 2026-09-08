@@ -57,11 +57,13 @@ class MagicAISystemPromptGrid extends DataGrid
                     ['label' => '通用对话', 'value' => 'general'],
                     ['label' => 'AI 商品分类', 'value' => 'category_classification'],
                     ['label' => '商品描述优化', 'value' => 'product_description'],
+                    ['label' => '商品名称优化', 'value' => 'product_name'],
                 ]],
             ],
             'closure' => fn ($row): string => match ($row->purpose) {
                 'category_classification' => 'AI 商品分类',
                 'product_description'     => '商品描述优化',
+                'product_name'            => '商品名称优化',
                 default                   => '通用对话',
             },
         ]);

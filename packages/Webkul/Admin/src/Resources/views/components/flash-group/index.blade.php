@@ -63,6 +63,20 @@
 
                 registerGlobalEvents() {
                     this.$emitter.on('add-flash', this.add);
+
+                    this.domFlashHandler = (event) => {
+                        if (event?.detail) {
+                            this.add(event.detail);
+                        }
+                    };
+                    window.addEventListener('unopim:flash', this.domFlashHandler);
+                },
+
+                beforeUnmount() {
+                    this.$emitter.off('add-flash', this.add);
+                    if (this.domFlashHandler) {
+                        window.removeEventListener('unopim:flash', this.domFlashHandler);
+                    }
                 },
             }
         });

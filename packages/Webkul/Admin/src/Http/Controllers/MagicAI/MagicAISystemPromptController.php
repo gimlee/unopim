@@ -39,7 +39,7 @@ class MagicAISystemPromptController extends Controller
     {
         $this->validate(request(), [
             'title'       => 'required',
-            'purpose'     => ['required', Rule::in(['general', 'category_classification', 'product_description'])],
+            'purpose'     => ['required', Rule::in(['general', 'category_classification', 'product_description', 'product_name'])],
             'tone'        => 'required',
             'is_enabled'  => 'required|boolean',
             'max_tokens'  => 'required|integer|min:1|max:32768',
@@ -83,7 +83,7 @@ class MagicAISystemPromptController extends Controller
     {
         $this->validate(request(), [
             'title'       => 'required',
-            'purpose'     => ['required', Rule::in(['general', 'category_classification', 'product_description'])],
+            'purpose'     => ['required', Rule::in(['general', 'category_classification', 'product_description', 'product_name'])],
             'tone'        => 'required',
             'is_enabled'  => 'required|boolean',
             'max_tokens'  => 'required|integer|min:1|max:32768',

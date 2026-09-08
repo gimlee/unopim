@@ -63,6 +63,7 @@
                                 <option value="general" @selected(old('purpose', $prompt->purpose) === 'general')>通用对话</option>
                                 <option value="category_classification" @selected(old('purpose', $prompt->purpose) === 'category_classification')>AI 商品分类</option>
                                 <option value="product_description" @selected(old('purpose', $prompt->purpose) === 'product_description')>商品描述优化 / 描述模板</option>
+                                <option value="product_name" @selected(old('purpose', $prompt->purpose) === 'product_name')>商品名称优化 / 名称模板</option>
                             </select>
 
                             <x-admin::form.control-group.error control-name="purpose" />

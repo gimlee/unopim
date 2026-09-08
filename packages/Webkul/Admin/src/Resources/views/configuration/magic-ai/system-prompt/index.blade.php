@@ -149,6 +149,7 @@
                                         <option value="general">通用对话</option>
                                         <option value="category_classification">AI 商品分类</option>
                                         <option value="product_description">商品描述优化 / 描述模板</option>
+                                        <option value="product_name">商品名称优化 / 名称模板</option>
                                     </select>
 
                                     <x-admin::form.control-group.error control-name="purpose" />

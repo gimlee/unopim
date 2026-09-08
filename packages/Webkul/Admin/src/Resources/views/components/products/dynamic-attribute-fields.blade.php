@@ -158,29 +158,31 @@
 
             <div class="self-end mb-2 text-xs flex gap-1 items-center">
                 @if (
+                    $field->code === 'name'
+                    && $productId
+                    && ! $isLocked
+                    && bouncer()->hasPermission('catalog.products.edit')
+                    && bouncer()->hasPermission('ai-agent')
+                )
+                    @include('admin::catalog.products.edit.product-name-ai', [
+                        'productId'   => $productId,
+                        'channelCode' => $currentChannelCode,
+                        'localeCode'  => $currentLocaleCode,
+                    ])
+                @endif
+
+                @if (
                     $field->code === 'short_description'
                     && $productId
                     && ! $isLocked
                     && bouncer()->hasPermission('catalog.products.edit')
                     && bouncer()->hasPermission('ai-agent')
                 )
-                    <button
-                        type="button"
-                        class="secondary-button !h-7 !px-2.5"
-                        data-no-toggle
-                        @click="$emitter.emit('product-description-ai:templates')"
-                    >
-                        描述模板
-                    </button>
-
-                    <button
-                        type="button"
-                        class="primary-button !h-7 !px-2.5"
-                        data-no-toggle
-                        @click="$emitter.emit('product-description-ai:optimize')"
-                    >
-                        AI商品描述
-                    </button>
+                    @include('admin::catalog.products.edit.short-description-ai', [
+                        'productId'   => $productId,
+                        'channelCode' => $currentChannelCode,
+                        'localeCode'  => $currentLocaleCode,
+                    ])
                 @endif
 
                 <x-admin::products.attribute-requirements

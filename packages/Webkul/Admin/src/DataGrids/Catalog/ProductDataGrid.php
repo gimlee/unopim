@@ -477,6 +477,16 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                     return route('admin.catalog.products.edit', $row->product_id);
                 },
             ]);
+
+            $this->addAction([
+                'index'  => 'ai_optimize',
+                'icon'   => 'icon-magic',
+                'title'  => 'AI 优化',
+                'method' => 'POST',
+                'url'    => function ($row) {
+                    return route('admin.catalog.products.ai_optimize', $row->product_id);
+                },
+            ]);
         }
 
         if (bouncer()->hasPermission('catalog.products.copy')) {

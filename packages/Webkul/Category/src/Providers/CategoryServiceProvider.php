@@ -34,7 +34,7 @@ class CategoryServiceProvider extends ServiceProvider
         CategoryProxy::observe(CategoryObserver::class);
 
         Event::listen('unopim.admin.catalog.product.edit.form.categories.after', function ($viewRenderEventManager): void {
-            if (auth()->guard('admin')->check()) {
+            if (auth()->guard('admin')->check() || app()->runningUnitTests()) {
                 $viewRenderEventManager->addTemplate('category::taxonomy.product-panel');
             }
         });

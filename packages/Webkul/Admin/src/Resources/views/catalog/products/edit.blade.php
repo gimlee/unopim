@@ -18,6 +18,10 @@
             <x-slot:beforeActions>
                 {!! view_render_event('unopim.pdf.product.edit.actions.before', ['product' => $product]) !!}
             </x-slot>
+
+            <x-slot:actions>
+                @include('admin::catalog.products.edit.workbench-actions')
+            </x-slot>
         </x-admin::layouts.edit-page-header>
     </x-slot>
 
@@ -176,7 +180,7 @@
                         <v-variant-axis-nav></v-variant-axis-nav>
                     @endif
 
-                    @include('admin::catalog.products.edit.categories', ['currentLocaleCode' => $currentLocale?->code, 'productCategories' => $product->resolvedValues()['categories'] ?? []])
+                    {!! view_render_event('unopim.admin.catalog.product.edit.form.categories.after', ['product' => $product]) !!}
 
                     @include('admin::catalog.products.edit.content-policy-revisions', [
                         'revisions' => $contentPolicyRevisions ?? collect(),
@@ -219,14 +223,6 @@
 
         {!! view_render_event('unopim.admin.catalog.product.edit.form.after', ['product' => $product]) !!}
     </x-admin::form>
-
-    @if (bouncer()->hasPermission('catalog.products.edit') && bouncer()->hasPermission('ai-agent'))
-        @include('admin::catalog.products.edit.short-description-ai', [
-            'productId'  => $product->parent_id ?: $product->id,
-            'channelCode' => $currentChannel->code,
-            'localeCode' => $currentLocale?->code,
-        ])
-    @endif
 
     {!! view_render_event('unopim.admin.catalog.product.edit.after', ['product' => $product]) !!}
 

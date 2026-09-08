@@ -253,6 +253,89 @@ class ProductContentPolicyService
         ];
     }
 
+    /** @return array<int, array<string, mixed>> */
+    public function nameTemplates(): array
+    {
+        return MagicAISystemPrompt::query()
+            ->where('purpose', 'product_name')
+            ->orderByDesc('is_enabled')
+            ->orderBy('title')
+            ->get()
+            ->map(fn (MagicAISystemPrompt $prompt): array => [
+                'id'          => $prompt->id,
+                'title'       => $prompt->title,
+                'content'     => $prompt->tone,
+                'max_tokens'  => $prompt->max_tokens,
+                'temperature' => $prompt->temperature,
+                'is_default'  => (bool) $prompt->is_enabled,
+            ])
+            ->all();
+    }
+
+    /**
+     * Optimize only Product Name with a user-selected managed template.
+     *
+     * @param  array<string, mixed>  $source
+     * @return array<string, mixed>
+     */
+    public function optimizeProductName(
+        Product $product,
+        ?string $requestedLocale,
+        ?string $requestedChannel,
+        int $templateId,
+        array $source = []
+    ): array {
+        [$channel, $locale, $stored] = $this->localizedContent($product, $requestedLocale, $requestedChannel);
+        $original = array_merge($stored, array_intersect_key($source, $stored));
+        $original = collect($original)->map(fn ($value): string => (string) $value)->all();
+        $template = $this->nameTemplate($templateId);
+        [$platform, $model] = $this->textPlatform();
+        $payload = [
+            'locale'     => $locale,
+            'product'    => [
+                'name'              => trim(strip_tags($original['name'])),
+                'short_description' => trim(strip_tags($original['short_description'])),
+                'description'       => trim(html_entity_decode(strip_tags($original['description']), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
+                'attributes'        => data_get($product->values ?: [], 'common.source_attributes'),
+            ],
+        ];
+        $optimizedName = $this->requestProductName($payload, $platform, $model, $template);
+
+        $optimized = $original;
+        $optimized['name'] = $optimizedName;
+
+        $revisionId = $this->persistRevision(
+            $product,
+            $channel,
+            $locale,
+            null,
+            $this->scan($original),
+            $original,
+            $optimized,
+            $platform,
+            $model,
+            'ai_name',
+            $template,
+            ['name'],
+        );
+
+        return [
+            'changed'        => true,
+            'revision_id'    => $revisionId,
+            'name'           => $optimized['name'],
+            'locale'         => $locale,
+            'channel'        => $channel,
+            'provider'       => $platform->label,
+            'model'          => $model,
+            'method'         => 'ai_name',
+            'template_id'    => $template->id,
+            'template_title' => $template->title,
+            'original'       => $original,
+            'content'        => $optimized,
+            'created_at'     => now()->toDateTimeString(),
+        ];
+    }
+
     /** @return array{0: string, 1: string, 2: array<string, string>} */
     protected function localizedContent(Product $product, ?string $requestedLocale, ?string $requestedChannel = null): array
     {
@@ -378,6 +461,31 @@ class ProductContentPolicyService
         return trim($template->tone)."\n\n必须遵守：只描述商品自身可验证的信息；不得出现任何价格、金额、币种、折扣或促销信息；不得出现国家、城市、产地、发货地、目标市场或销售地区；不得出现任何电商平台、店铺、销售渠道、上架、批发、转售或销售目的信息。使用自然段组织内容，段落之间用空行分隔；每个句子必须有完整标点，表达自然、通顺、人类可读，不得堆砌关键词或虚构事实。";
     }
 
+    protected function nameTemplate(?int $id = null): MagicAISystemPrompt
+    {
+        $query = MagicAISystemPrompt::query()->where('purpose', 'product_name');
+        $template = $id
+            ? (clone $query)->whereKey($id)->first()
+            : (clone $query)->where('is_enabled', true)->first();
+        $template ??= $query->orderBy('id')->first();
+
+        if (! $template) {
+            throw new RuntimeException('没有可用的商品名称优化提示词，请先在 Magic AI → System Prompts 中创建。');
+        }
+
+        return $template;
+    }
+
+    protected function nameSystemPrompt(MagicAISystemPrompt $template): string
+    {
+        return trim($template->tone)."\n\n必须遵守："
+            ."1. 【绝对禁止货源表述】：严禁提及“厂家”、“工厂”、“源头工厂”、“直销”、“厂家直销”、“一手货源”、“批发”、“代发”、“一件代发”、“代工”、“加工”、“定制”等任何形式的货源、供应或批发表述；\n"
+            ."2. 【特性功能联想与深度拓展】：必须充分挖掘并联想商品的实用特性与扩张功能、适用场景、痛点解决、多用途搭配及核心优势，突出产品为消费者带来的实际价值与品质体验；\n"
+            ."3. 【禁止价格与平台信息】：严禁出现任何价格、金额、币种、折扣、促销词；严禁提及任何电商平台名称（如淘宝、1688、拼多多、天猫、京东、亚马逊、Shopee、Lazada、TikTok等）或店铺、上架等内部信息；\n"
+            ."4. 【真实客观与合规】：严禁虚构不存在的参数或功效，严禁使用国家广告法禁用的极限词；\n"
+            ."5. 【格式与长度要求】：仅输出单行商品名称文本，不得换行，长度严格控制在 60 至 120 个字符以内。";
+    }
+
     /**
      * @param  array<string, mixed>  $payload
      */
@@ -428,6 +536,96 @@ class ProductContentPolicyService
         }
 
         throw new RuntimeException('AI 优化后的 Short Description 仍不符合要求：'.implode('、', $violations));
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function requestProductName(
+        array $payload,
+        MagicAIPlatform $platform,
+        string $model,
+        MagicAISystemPrompt $template
+    ): string {
+        $feedback = '';
+        $violations = [];
+        $locale = (string) ($payload['locale'] ?? 'zh_CN');
+        $language = $this->descriptionLanguageInstruction($locale);
+
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $response = magic_ai()
+                ->setPlatformId($platform->id)
+                ->setModel($model)
+                ->setTemperature((float) $template->temperature)
+                ->setMaxTokens((int) $template->max_tokens)
+                ->setSystemPrompt($this->nameSystemPrompt($template))
+                ->setPrompt(
+                    '请优化商品名称（Title/Name）。只返回 JSON：{"name":""}。不得返回 Markdown 或解释。'
+                    ."目标语言：{$language}。全部内容必须使用目标语言，不得改用英文或其他语言。"
+                    .'生成单行吸引消费者的电商商品标题，深度联想与拓展特性的扩张功能，长度在 60 至 120 个字符之间。'
+                    .'【严禁提及厂家、工厂、直销、一手货源、批发、代发等词汇】。'.$feedback."\n"
+                    .mb_substr(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 30000),
+                    'text'
+                )
+                ->ask();
+            $decoded = $this->decodeJson($response);
+            $name = trim(strip_tags((string) ($decoded['name'] ?? '')));
+            $name = preg_replace('/[\r\n]+/u', ' ', $name) ?? $name;
+            $name = trim($name, " \t\n\r\0\x0B\"'“”‘’");
+
+            $violations = $this->namePolicyViolations($name, $locale);
+
+            if ($violations === []) {
+                return $name;
+            }
+
+            $feedback = '\n上一版存在以下违规问题：'.implode('、', $violations).'。请严格排除厂家直销等违规词，拓展功能特性，重新生成合规商品名称。';
+        }
+
+        throw new RuntimeException('AI 优化后的商品名称仍不符合要求：'.implode('、', $violations));
+    }
+
+    /** @return array<int, string> */
+    public function namePolicyViolations(string $name, string $locale = 'zh_CN'): array
+    {
+        $visible = trim(html_entity_decode(strip_tags($name), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+        $violations = [];
+
+        if ($visible === '') {
+            return ['空名称'];
+        }
+
+        if (preg_match('/[\r\n]/u', $name)) {
+            $violations[] = '包含换行符（必须为单行标题）';
+        }
+
+        $hasKnownPlatform = collect(config('content_policy.default_forbidden_words', []))
+            ->contains(fn (string $word): bool => preg_match($this->pattern($word), $visible) === 1);
+        if ($hasKnownPlatform || $this->scan(['name' => $visible]) !== [] || preg_match('/(?:电商|购物|销售|线上)平台|销售渠道|线上商城|网店|店铺|marketplace|e[ -]?commerce platform|online (?:platform|store|shop)|1688|淘宝|天猫|京东|拼多多|亚马逊|虾皮|来赞达/iu', $visible)) {
+            $violations[] = '电商平台或销售渠道信息';
+        }
+
+        if (preg_match('/(?:价格|售价|单价|零售价|批发价|促销价|优惠价|折扣价|到手价|price|priced|pricing|cost)\s*[:：]?\s*(?:[A-Z]{3}|RM|RMB|[$¥￥€£])?\s*\d|[$¥￥€£]\s*\d|\b(?:RM|MYR|THB|USD|CNY|RMB|EUR|GBP)\b\s*[:：]?\s*\d|\d+(?:[.,]\d+)?\s*(?:元|人民币|美元|美金|马币|令吉|泰铢|บาท|\b(?:RM|MYR|THB|USD|CNY|RMB|EUR|GBP)\b)/iu', $visible)) {
+            $violations[] = '价格、金额或币种信息';
+        }
+
+        if (preg_match('/(?:产地|原产地|原产国|制造地|生产地|发货地|供应商所在地|销售地区|销售区域|目标市场|销往|面向.{0,12}(?:市场|地区)|(?:适合|适用于).{0,12}(?:市场|地区))|\b(?:Malaysia|Thailand|China|Vietnam|Indonesia|Singapore|United States|USA|MY|TH|CN|VN|ID|SG)\b|马来西亚|泰国|中国|越南|印度尼西亚|印尼|新加坡|美国/iu', $visible)) {
+            $violations[] = '国家、地区、产地或目标市场信息';
+        }
+
+        if (preg_match('/(?:厂家|工厂|源头工[厂单]|直销|厂[家直]直销|一手货源|批[发发]|支持一件代发|一件代发|一件起批|代工|代发|加工|定制货源|源头好货|源头直供|厂价)/iu', $visible)) {
+            $violations[] = '厂家、直销、货源或批发表述';
+        }
+
+        if (str_starts_with(strtolower($locale), 'zh') && preg_match_all('/\p{Han}/u', $visible) < 6) {
+            $violations[] = '未使用简体中文';
+        }
+
+        if (mb_strlen($visible) < 10) {
+            $violations[] = '名称过短（少于 10 个字符）';
+        }
+
+        return array_values(array_unique($violations));
     }
 
     /** @param array<string, mixed> $content */
@@ -554,6 +752,30 @@ class ProductContentPolicyService
                 ? array_intersect_key($optimized, array_flip($fieldsToPersist))
                 : $optimized;
             data_set($values, "channel_locale_specific.$channel.$locale", array_merge($localized, $persisted));
+
+            if (isset($persisted['name']) && ! empty($persisted['name'])) {
+                $currentOriginalName = data_get($values, 'common.original_name');
+                if (empty($currentOriginalName) && ! empty($original['name'])) {
+                    data_set($values, 'common.original_name', $original['name']);
+                }
+
+                $allChannels = (array) data_get($values, 'channel_locale_specific', []);
+                foreach ($allChannels as $ch => $locales) {
+                    if (! is_array($locales)) {
+                        continue;
+                    }
+                    foreach ($locales as $loc => $fields) {
+                        if ($ch === $channel && $loc === $locale) {
+                            continue;
+                        }
+                        $otherName = $fields['name'] ?? null;
+                        if ($otherName === ($original['name'] ?? null) || empty($otherName)) {
+                            data_set($values, "channel_locale_specific.$ch.$loc.name", $persisted['name']);
+                        }
+                    }
+                }
+            }
+
             $product->values = $values;
             $product->save();
 

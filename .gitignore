@@ -49,6 +49,7 @@ test-results
 !/docs/category-selection-ai.md
 !/docs/product-info-management-integration.md
 !/docs/product-description-ai.md
+!/docs/product-name-ai.md
 graphify-out
 .mcp.json
 boost.json

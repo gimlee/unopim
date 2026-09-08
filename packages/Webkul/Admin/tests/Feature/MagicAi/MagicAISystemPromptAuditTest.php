@@ -14,6 +14,7 @@ function updateSystemPromptUnchanged($test, MagicAISystemPrompt $prompt)
     return $test->put(route('admin.magic_ai.system_prompt.update'), [
         'id'          => $prompt->id,
         'title'       => $prompt->title,
+        'purpose'     => $prompt->purpose ?: 'general',
         'tone'        => $prompt->tone,
         'max_tokens'  => $prompt->max_tokens,
         'temperature' => $prompt->temperature,
@@ -62,6 +63,7 @@ describe('MagicAI system prompt update audits', function () {
         $this->put(route('admin.magic_ai.system_prompt.update'), [
             'id'          => $prompt->id,
             'title'       => $prompt->title,
+            'purpose'     => $prompt->purpose ?: 'general',
             'tone'        => $prompt->tone,
             'max_tokens'  => $prompt->max_tokens,
             'temperature' => $prompt->temperature,

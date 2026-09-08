@@ -1,11 +1,11 @@
-<v-product-short-description-ai
+<v-product-name-ai
     product-id="{{ $productId }}"
     channel-code="{{ $channelCode }}"
     locale-code="{{ $localeCode }}"
-></v-product-short-description-ai>
+></v-product-name-ai>
 
 @pushOnce('scripts')
-    <script type="text/x-template" id="v-product-short-description-ai-template">
+    <script type="text/x-template" id="v-product-name-ai-template">
         <div class="inline-flex gap-1 items-center">
             <button
                 type="button"
@@ -14,7 +14,7 @@
                 :disabled="optimizing"
                 @click="openTemplates"
             >
-                描述模板
+                名称模板
             </button>
 
             <button
@@ -28,14 +28,14 @@
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                <span v-text="optimizing ? 'AI生成中…' : 'AI商品描述'"></span>
+                <span v-text="optimizing ? 'AI生成中…' : 'AI商品名称'"></span>
             </button>
 
-            <x-admin::modal ref="templatesModal">
+            <x-admin::modal ref="nameTemplatesModal">
                 <x-slot:header>
                     <div>
-                        <p class="text-lg font-semibold text-gray-800 dark:text-white">商品描述优化模板</p>
-                        <p class="mt-1 text-sm text-gray-500">选择模板后可以查看或修改内容，再使用该模板优化 Short Description。</p>
+                        <p class="text-lg font-semibold text-gray-800 dark:text-white">商品名称优化模板</p>
+                        <p class="mt-1 text-sm text-gray-500">选择模板后可以查看或修改内容，再使用该模板优化商品名称。</p>
                     </div>
                 </x-slot:header>
 
@@ -43,7 +43,7 @@
                     <div v-if="loading" class="py-10 text-center text-sm text-gray-500">正在加载模板…</div>
 
                     <div v-else-if="! templates.length" class="rounded border border-dashed p-8 text-center text-sm text-gray-500">
-                        暂无商品描述模板，请在 Magic AI → System Prompts 中新增“商品描述优化”用途的提示词。
+                        暂无商品名称优化模板，请在 Magic AI → System Prompts 中新增“商品名称优化”用途的提示词。
                     </div>
 
                     <div v-else class="grid grid-cols-1 gap-4 lg:grid-cols-3" style="min-height: 420px">
@@ -88,7 +88,7 @@
                     <div class="flex w-full items-center justify-between gap-3">
                         <p class="truncate text-sm text-gray-500" v-text="selected ? `本次使用：${selected.title}` : '请先选择模板'"></p>
                         <button type="button" class="primary-button" :disabled="optimizing || ! selected" @click="optimize">
-                            <span v-text="optimizing ? 'AI 商品描述生成中…' : '使用此模板生成 AI 商品描述'"></span>
+                            <span v-text="optimizing ? 'AI 商品名称生成中…' : '使用此模板生成 AI 商品名称'"></span>
                         </button>
                     </div>
                 </x-slot:footer>
@@ -97,8 +97,8 @@
     </script>
 
     <script type="module">
-        app.component('v-product-short-description-ai', {
-            template: '#v-product-short-description-ai-template',
+        app.component('v-product-name-ai', {
+            template: '#v-product-name-ai-template',
 
             props: ['productId', 'channelCode', 'localeCode'],
 
@@ -116,13 +116,13 @@
             },
 
             mounted() {
-                this.$emitter?.on('product-description-ai:templates', this.openTemplates);
-                this.$emitter?.on('product-description-ai:optimize', this.optimizeFromButton);
+                this.$emitter?.on('product-name-ai:templates', this.openTemplates);
+                this.$emitter?.on('product-name-ai:optimize', this.optimizeFromButton);
             },
 
             beforeUnmount() {
-                this.$emitter?.off('product-description-ai:templates', this.openTemplates);
-                this.$emitter?.off('product-description-ai:optimize', this.optimizeFromButton);
+                this.$emitter?.off('product-name-ai:templates', this.openTemplates);
+                this.$emitter?.off('product-name-ai:optimize', this.optimizeFromButton);
             },
 
             methods: {
@@ -138,7 +138,7 @@
 
                     this.loading = true;
 
-                    return this.$axios.get(@json(route('admin.catalog.products.description_ai.templates')))
+                    return this.$axios.get(@json(route('admin.catalog.products.name_ai.templates')))
                         .then(response => {
                             this.templates = response.data.data || [];
                             const selectedId = this.selected?.id;
@@ -159,7 +159,7 @@
 
                 openTemplates() {
                     this.loadTemplates()
-                        .then(() => this.$refs.templatesModal.toggle())
+                        .then(() => this.$refs.nameTemplatesModal.toggle())
                         .catch(this.notifyTemplateLoadError);
                 },
 
@@ -170,7 +170,7 @@
                     ready
                         .then(() => {
                             if (! this.selected) {
-                                this.emitFlash('warning', '请先创建商品描述优化模板。');
+                                this.emitFlash('warning', '请先创建商品名称优化模板。');
                                 return;
                             }
 
@@ -180,32 +180,23 @@
                 },
 
                 notifyTemplateLoadError(error) {
-                    this.emitFlash('error', error.response?.data?.message || '商品描述模板加载失败。');
+                    this.emitFlash('error', error.response?.data?.message || '商品名称模板加载失败。');
                 },
 
                 readField(code) {
-                    const editor = window.tinymce?.get(code)
-                        || (window.tinymce?.editors || []).find(e => e.id && e.id.includes(code));
+                    const editor = window.tinymce?.get(code);
                     if (editor) return editor.getContent();
 
                     const field = document.getElementById(code)
                         || document.querySelector(`[name*="[${code}]"]`)
-                        || document.querySelector(`textarea[name$="[${code}]"]`)
                         || document.querySelector(`input[name$="[${code}]"]`);
                     return field ? field.value : '';
                 },
 
-                applyShortDescription(value) {
-                    const editor = window.tinymce?.get('short_description')
-                        || (window.tinymce?.editors || []).find(e => e.id && e.id.includes('short_description'));
-
-                    if (editor) {
-                        editor.setContent(value);
-                    }
-
-                    const field = document.getElementById('short_description')
-                        || document.querySelector('[name*="[short_description]"]')
-                        || document.querySelector('textarea[name$="[short_description]"]');
+                applyProductName(value) {
+                    const field = document.getElementById('name')
+                        || document.querySelector('[name*="[name]"]')
+                        || document.querySelector('input[name$="[name]"]');
 
                     if (field) {
                         field.value = value;
@@ -218,7 +209,7 @@
                     if (! this.selected || this.optimizing) return;
 
                     this.optimizing = true;
-                    const url = @json(route('admin.catalog.products.description_ai.optimize', '__ID__')).replace('__ID__', this.productId);
+                    const url = @json(route('admin.catalog.products.name_ai.optimize', '__ID__')).replace('__ID__', this.productId);
 
                     this.$axios.post(url, {
                         channel: this.channelCode,
@@ -229,11 +220,11 @@
                         source_description: this.readField('description'),
                     }).then(response => {
                         const result = response.data.data;
-                        this.applyShortDescription(result.short_description);
+                        this.applyProductName(result.name);
                         this.$emitter?.emit('content-policy:revision-created', result);
-                        this.emitFlash('success', response.data.message || 'AI 商品描述生成成功！');
+                        this.emitFlash('success', response.data.message || 'AI 商品名称生成成功！');
                     }).catch(error => {
-                        this.emitFlash('error', error.response?.data?.message || 'AI 商品描述生成失败。');
+                        this.emitFlash('error', error.response?.data?.message || 'AI 商品名称生成失败。');
                     }).finally(() => this.optimizing = false);
                 },
 
@@ -241,7 +232,7 @@
                     if (! this.selected || this.savingTemplate) return;
 
                     this.savingTemplate = true;
-                    const url = @json(route('admin.catalog.products.description_ai.templates.update', '__ID__')).replace('__ID__', this.selected.id);
+                    const url = @json(route('admin.catalog.products.name_ai.templates.update', '__ID__')).replace('__ID__', this.selected.id);
 
                     this.$axios.put(url, { title: this.draftTitle, content: this.draftContent })
                         .then(response => {

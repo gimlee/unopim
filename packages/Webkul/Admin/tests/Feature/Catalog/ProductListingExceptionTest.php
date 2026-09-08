@@ -40,3 +40,31 @@ it('shows listing exceptions on the product page and lets an admin resolve them'
 
     expect(DB::table('product_listing_exceptions')->where('id', $exceptionId)->value('resolved_at'))->not->toBeNull();
 });
+
+it('fetches listing exceptions via ajax index endpoint', function () {
+    $this->loginAsAdmin();
+    $product = Product::factory()->configurable()->create(['sku' => 'LISTING-REFRESH-'.uniqid()]);
+    DB::table('product_listing_exceptions')->insert([
+        'product_id'       => $product->id,
+        'sku'              => $product->sku,
+        'platform'         => 'tiktok',
+        'region'           => 'MY',
+        'attempt_id'       => 'attempt-refresh',
+        'event_key'        => hash('sha256', 'refresh-test'),
+        'exception_type'   => 'captcha',
+        'stage'            => 'login',
+        'severity'         => 'warning',
+        'message'          => '验证码已触发',
+        'requires_manual'  => true,
+        'blocking'         => true,
+        'details'          => json_encode(['node' => 'captcha']),
+        'occurred_at'      => now(),
+        'created_at'       => now(),
+        'updated_at'       => now(),
+    ]);
+
+    $this->getJson(route('admin.catalog.products.listing_exceptions.index', $product->id))
+        ->assertOk()
+        ->assertJsonPath('data.0.exception_type', 'captcha')
+        ->assertJsonPath('data.0.message', '验证码已触发');
+});

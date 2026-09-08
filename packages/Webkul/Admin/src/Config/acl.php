@@ -82,6 +82,21 @@ return [
         'sort'  => 3,
     ], [
         'key'   => 'catalog.products.edit',
+        'name'  => '商品名称 AI 优化',
+        'route' => 'admin.catalog.products.name_ai.templates',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
+        'name'  => '商品名称 AI 优化',
+        'route' => 'admin.catalog.products.name_ai.templates.update',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
+        'name'  => '商品名称 AI 优化',
+        'route' => 'admin.catalog.products.name_ai.optimize',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
         'name'  => '处理商品上架异常',
         'route' => 'admin.catalog.products.listing_exceptions.update',
         'sort'  => 3,

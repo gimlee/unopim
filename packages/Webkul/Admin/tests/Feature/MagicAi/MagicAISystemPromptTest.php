@@ -61,6 +61,7 @@ it('should update a system prompt successfully', function () {
     $data = [
         'id'             => $prompt->id,
         'title'          => 'professional',
+        'purpose'        => 'general',
         'tone'           => 'Be professional and give response in points',
         'max_tokens'     => 1024,
         'temperature'    => 0.4,

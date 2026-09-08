@@ -13,6 +13,7 @@ use Webkul\Admin\Http\Controllers\Catalog\Options\AjaxOptionsController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductBulkEditController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductDescriptionAiController;
+use Webkul\Admin\Http\Controllers\Catalog\ProductNameAiController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductGridViewController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductListingExceptionController;
 use Webkul\Admin\Http\Middleware\EnsureChannelLocaleIsValid;
@@ -197,7 +198,7 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
          * Products routes.
          */
         Route::controller(ProductController::class)->prefix('products')->group(function () {
-            Route::get('', 'index')->name('admin.catalog.products.index');
+            Route::get('', 'index')->name('admin.catalog.products.index')->middleware(EnsureChannelLocaleIsValid::class);
 
             Route::get('quick-export', 'quickExport')->name('admin.catalog.products.quick-export');
 
@@ -236,6 +237,10 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
             Route::get('get/locale', 'getLocale')->name('admin.catalog.product.get_locale');
 
             Route::get('get/attributes', 'getAttribute')->name('admin.catalog.product.get_attribute');
+
+            Route::post('{id}/ai-optimize', 'aiOptimize')->name('admin.catalog.products.ai_optimize');
+
+            Route::post('{id}/listing-draft', 'listingDraft')->name('admin.catalog.products.listing_draft');
         });
 
         Route::controller(ProductDescriptionAiController::class)->prefix('products/description-ai')->group(function () {
@@ -244,7 +249,14 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
             Route::post('{id}/optimize', 'optimize')->name('admin.catalog.products.description_ai.optimize');
         });
 
+        Route::controller(ProductNameAiController::class)->prefix('products/name-ai')->group(function () {
+            Route::get('templates', 'templates')->name('admin.catalog.products.name_ai.templates');
+            Route::put('templates/{id}', 'updateTemplate')->name('admin.catalog.products.name_ai.templates.update');
+            Route::post('{id}/optimize', 'optimize')->name('admin.catalog.products.name_ai.optimize');
+        });
+
         Route::controller(ProductListingExceptionController::class)->prefix('products/{productId}/listing-exceptions')->group(function () {
+            Route::get('', 'index')->name('admin.catalog.products.listing_exceptions.index');
             Route::patch('{exceptionId}', 'update')->name('admin.catalog.products.listing_exceptions.update');
         });
 

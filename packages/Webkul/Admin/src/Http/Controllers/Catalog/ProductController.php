@@ -7,10 +7,18 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Throwable;
+use Webkul\AdminApi\Services\ProductContentPolicyService;
+use Webkul\Category\Services\ProductCategoryAiClassifier;
+use Webkul\Category\Services\ProductCategoryClassificationManager;
+use Webkul\MagicAI\Enums\AiProvider;
+use Webkul\MagicAI\Models\MagicAIPlatform;
+use Webkul\MagicAI\Models\MagicAISystemPrompt;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -778,6 +786,13 @@ class ProductController extends Controller
     public function edit(int $id): View
     {
         $product = $this->productRepository->findOrFail($id);
+
+        if (! request()->has('locale')) {
+            $requestedChannel = core()->getRequestedChannel() ?? core()->getDefaultChannel();
+            if ($requestedChannel?->locales?->contains('code', 'zh_CN')) {
+                request()->merge(['locale' => 'zh_CN']);
+            }
+        }
 
         $requestedChannelId = core()->getRequestedChannel()->id;
 
@@ -1898,5 +1913,256 @@ class ProductController extends Controller
         return new JsonResponse([
             'attributes' => $attributeOptions,
         ]);
+    }
+
+    /**
+     * One-click AI optimization: execute AI categorization and AI description optimization.
+     */
+    public function aiOptimize(
+        int $id,
+        ProductCategoryAiClassifier $classifier,
+        ProductCategoryClassificationManager $manager,
+        ProductContentPolicyService $policy
+    ): JsonResponse {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+
+        $product = $this->productRepository->findOrFail($id);
+        $rootProduct = $product->parent ?: $product;
+
+        $results = [
+            'category'    => null,
+            'description' => null,
+            'errors'      => [],
+        ];
+
+        // 1. AI 商品分类（如已完成则跳过）
+        $hasCategories = ! empty($rootProduct->values['categories'])
+            || ! empty(data_get($rootProduct->values, 'common.categories'))
+            || (method_exists($rootProduct, 'categories') && $rootProduct->categories()->exists());
+
+        $hasAiClassification = data_get($rootProduct->values, 'common.category_classification_method') === 'ai'
+            || (Schema::hasTable('product_category_assignments') && DB::table('product_category_assignments')
+                ->where('product_id', $rootProduct->id)
+                ->where('method', 'ai')
+                ->where('status', 'confirmed')
+                ->exists())
+            || (Schema::hasTable('product_category_classification_caches') && DB::table('product_category_classification_caches')
+                ->where('product_id', $rootProduct->id)
+                ->where('method', 'ai')
+                ->where('status', 'applied')
+                ->exists());
+
+        $categoryAlreadyOptimized = $hasCategories && $hasAiClassification;
+
+        if ($categoryAlreadyOptimized) {
+            $results['category'] = ['skipped' => true, 'message' => '分类已完成，跳过'];
+        } else {
+            try {
+                $platform = MagicAIPlatform::query()
+                    ->where('status', true)
+                    ->where('provider', '!=', AiProvider::ZhipuCodePlan->value)
+                    ->orderByDesc('is_default')
+                    ->orderBy('id')
+                    ->get()
+                    ->first(fn (MagicAIPlatform $candidate): bool => count($candidate->model_list) > 0);
+
+                if ($platform) {
+                    $model = collect($platform->model_list)
+                        ->first(fn (string $name): bool => str_contains(strtolower($name), 'flash'))
+                        ?: $platform->model_list[0];
+
+                    $classification = $classifier->classify($rootProduct, $platform, $model);
+                    $manager->remember($rootProduct, 'ai', $classification);
+                    $applied = $manager->apply($rootProduct, 'ai', auth()->guard('admin')->id());
+                    $results['category'] = $manager->present($applied);
+                } else {
+                    $results['errors'][] = '没有可用于分类的 Magic AI 平台';
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $results['errors'][] = 'AI分类失败: ' . $e->getMessage();
+            }
+        }
+
+        // 2. AI 优化商品名称（如已优化过则跳过）
+        $nameAlreadyOptimized = DB::table('product_content_revisions')
+            ->where('product_id', $rootProduct->id)
+            ->where('method', 'ai_name')
+            ->exists();
+
+        if ($nameAlreadyOptimized) {
+            $results['name'] = ['skipped' => true, 'message' => '商品名称已优化，跳过'];
+        } else {
+            try {
+                $nameTemplates = $policy->nameTemplates();
+                $defaultNameTemplate = collect($nameTemplates)->firstWhere('is_default', true) ?: ($nameTemplates[0] ?? null);
+
+                if ($defaultNameTemplate) {
+                    $localeCode = request()->input('locale') ?: 'zh_CN';
+                    $channelCode = request()->input('channel') ?: core()->getDefaultChannelCode();
+
+                    $nameResult = $policy->optimizeProductName(
+                        $rootProduct,
+                        $localeCode,
+                        $channelCode,
+                        (int) $defaultNameTemplate['id']
+                    );
+                    $results['name'] = $nameResult;
+                } else {
+                    $results['errors'][] = '未找到商品名称优化模板';
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $results['errors'][] = 'AI名称优化失败: ' . $e->getMessage();
+            }
+        }
+
+        // 3. AI 优化商品描述（如已优化过则跳过）
+        $descAlreadyOptimized = DB::table('product_content_revisions')
+            ->where('product_id', $rootProduct->id)
+            ->whereIn('method', ['ai', 'ai_description'])
+            ->exists();
+
+        if ($descAlreadyOptimized) {
+            $results['description'] = ['skipped' => true, 'message' => '商品描述已优化，跳过'];
+        } else {
+            try {
+                $templates = $policy->descriptionTemplates();
+                $defaultTemplate = collect($templates)->firstWhere('is_default', true) ?: ($templates[0] ?? null);
+
+                if ($defaultTemplate) {
+                    $localeCode = request()->input('locale') ?: 'zh_CN';
+                    $channelCode = request()->input('channel') ?: core()->getDefaultChannelCode();
+
+                    $descResult = $policy->optimizeShortDescription(
+                        $rootProduct,
+                        $localeCode,
+                        $channelCode,
+                        (int) $defaultTemplate['id']
+                    );
+                    $results['description'] = $descResult;
+                } else {
+                    $results['errors'][] = '未找到商品描述模板';
+                }
+            } catch (Throwable $e) {
+                report($e);
+                $results['errors'][] = 'AI描述优化失败: ' . $e->getMessage();
+            }
+        }
+
+        $allSkipped = (! empty($results['category']['skipped']))
+            && (! empty($results['name']['skipped']))
+            && (! empty($results['description']['skipped']));
+
+        if ($allSkipped) {
+            return response()->json([
+                'success' => true,
+                'message' => '商品名称、描述和分类均已优化，无需重复执行。',
+                'data'    => $results,
+            ]);
+        }
+
+        $hasSuccess = (! empty($results['category']) && empty($results['category']['skipped']))
+            || (! empty($results['name']) && empty($results['name']['skipped']))
+            || (! empty($results['description']) && empty($results['description']['skipped']))
+            || (! empty($results['category']['skipped']))
+            || (! empty($results['name']['skipped']))
+            || (! empty($results['description']['skipped']));
+
+        if (! $hasSuccess) {
+            return response()->json([
+                'success' => false,
+                'message' => 'AI优化失败: ' . implode('; ', $results['errors']),
+                'data'    => $results,
+            ], 422);
+        }
+
+        $summaryParts = [];
+        if (! empty($results['name']['skipped'])) {
+            $summaryParts[] = '名称已优化跳过';
+        } elseif (! empty($results['name'])) {
+            $summaryParts[] = '名称已优化';
+        }
+
+        if (! empty($results['description']['skipped'])) {
+            $summaryParts[] = '描述已优化跳过';
+        } elseif (! empty($results['description'])) {
+            $summaryParts[] = '描述已优化';
+        }
+
+        if (! empty($results['category']['skipped'])) {
+            $summaryParts[] = '分类已完成跳过';
+        } elseif (! empty($results['category'])) {
+            $summaryParts[] = '分类已完成';
+        }
+
+        $message = 'AI 优化完成！' . ($summaryParts ? '（' . implode('，', $summaryParts) . '）' : '');
+        if (! empty($results['errors'])) {
+            $message .= '（提示: ' . implode('; ', $results['errors']) . '）';
+        }
+
+        return response()->json([
+            'success' => true,
+            'message' => $message,
+            'data'    => $results,
+        ]);
+    }
+
+    /**
+     * Trigger draft listing on TikTok Shop via PIM API.
+     */
+    public function listingDraft(int $id): JsonResponse
+    {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+
+        @set_time_limit(300);
+        @ini_set('max_execution_time', '300');
+
+        $product = $this->productRepository->findOrFail($id);
+        $rootProduct = $product->parent ?: $product;
+
+        $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+        $region = request()->input('region', 'MY');
+        $action = request()->input('action', 'draft');
+        $isSubmit = ($action === 'submit') || request()->boolean('submit_for_review');
+
+        try {
+            $response = Http::timeout(300)->post("{$pimUrl}/api/products/{$rootProduct->sku}/listing/run", [
+                'region'                  => $region,
+                'save'                    => true,
+                'accept_auto_translation' => true,
+                'submit_for_review'       => $isSubmit,
+            ]);
+
+            if (! $response->successful()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['detail'] ?? $errorData['message'] ?? ('PIM 响应错误 HTTP ' . $response->status());
+                $failedLabel = $isSubmit ? '上架审核失败' : '上架草稿失败';
+
+                return response()->json([
+                    'success' => false,
+                    'message' => "{$failedLabel}: {$errorMessage}",
+                ], 422);
+            }
+
+            $successLabel = $isSubmit ? 'TikTok Shop 上架审核提交成功！' : 'TikTok Shop 草稿已生成成功！';
+
+            return response()->json([
+                'success' => true,
+                'message' => $successLabel,
+                'data'    => $response->json('data'),
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+            $failedLabel = $isSubmit ? '上架审核请求失败' : '上架草稿请求失败';
+
+            return response()->json([
+                'success' => false,
+                'message' => "{$failedLabel}: " . $e->getMessage(),
+            ], 500);
+        }
     }
 }

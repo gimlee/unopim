@@ -9,6 +9,32 @@ use Webkul\Product\Models\Product;
 
 class ProductListingExceptionController extends Controller
 {
+    public function index(int $productId): JsonResponse
+    {
+        if (! bouncer()->hasPermission('catalog.products.edit')) {
+            abort(403);
+        }
+
+        $product = Product::query()->findOrFail($productId);
+        $productId = $product->parent_id ?: $product->id;
+        $exceptions = DB::table('product_listing_exceptions')
+            ->where('product_id', $productId)
+            ->orderByDesc('id')
+            ->get()
+            ->map(function ($item) {
+                if (isset($item->details) && is_string($item->details)) {
+                    $item->details = json_decode($item->details, true) ?? [];
+                }
+
+                return $item;
+            });
+
+        return response()->json([
+            'success' => true,
+            'data'    => $exceptions,
+        ]);
+    }
+
     public function update(int $productId, int $exceptionId): JsonResponse
     {
         if (! bouncer()->hasPermission('catalog.products.edit')) {

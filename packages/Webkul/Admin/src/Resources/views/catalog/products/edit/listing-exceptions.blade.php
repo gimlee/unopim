@@ -11,14 +11,31 @@
             icon="icon-information"
         >
             <x-slot:toggle>
-                <x-admin::product.section-card
-                    id="listing-exceptions"
-                    title="上架异常记录"
-                    icon="icon-information"
-                >
-                    <span v-text="summary"></span>
-                </x-admin::product.section-card>
+                <div @click="fetchExceptions(false)">
+                    <x-admin::product.section-card
+                        id="listing-exceptions"
+                        title="上架异常记录"
+                        icon="icon-information"
+                    >
+                        <span v-text="summary"></span>
+                    </x-admin::product.section-card>
+                </div>
             </x-slot:toggle>
+
+            <x-slot:headerActions>
+                <button
+                    type="button"
+                    class="secondary-button !h-8 shrink-0 !px-3 inline-flex items-center gap-1.5"
+                    :disabled="isRefreshing"
+                    @click="fetchExceptions(true)"
+                >
+                    <span
+                        class="icon-refresh text-base"
+                        :class="{'animate-spin': isRefreshing}"
+                    ></span>
+                    <span>刷新</span>
+                </button>
+            </x-slot:headerActions>
 
             <x-slot:content>
                 <div v-if="! exceptions.length" class="rounded border border-dashed p-5 text-center text-sm text-gray-500 dark:border-cherry-700">
@@ -78,6 +95,7 @@
                 return {
                     exceptions: @json($exceptions->values()),
                     savingId: null,
+                    isRefreshing: false,
                 };
             },
 
@@ -115,6 +133,30 @@
 
                 detailsText(item) {
                     return JSON.stringify(item.details || {}, null, 2);
+                },
+
+                fetchExceptions(showFlash = true) {
+                    if (this.isRefreshing) return;
+                    this.isRefreshing = true;
+                    const url = @json(route('admin.catalog.products.listing_exceptions.index', ['productId' => '__PRODUCT__']))
+                        .replace('__PRODUCT__', this.productId);
+
+                    this.$axios.get(url)
+                        .then(response => {
+                            this.exceptions = response.data.data || [];
+                            if (showFlash) {
+                                this.$emitter.emit('add-flash', { type: 'success', message: '上架异常记录已刷新。' });
+                            }
+                        })
+                        .catch(error => {
+                            if (showFlash) {
+                                this.$emitter.emit('add-flash', {
+                                    type: 'error',
+                                    message: error.response?.data?.message || '刷新上架异常记录失败。',
+                                });
+                            }
+                        })
+                        .finally(() => this.isRefreshing = false);
                 },
 
                 toggleResolved(item) {
