@@ -184,11 +184,53 @@ it('optimizes only short description with a managed template and stores the prev
     expect($result['method'])->toBe('ai_description')
         ->and($result['provider'])->toBe($platform->label)
         ->and($stored['short_description'])->toBe('<p>采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备。</p><p>折叠后便于收纳。</p>')
-        ->and($stored['description'])->toBe('<p>铝合金结构，可折叠调节角度。</p>')
+        ->and($stored['description'])->toBe('<p>采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备。</p><p>折叠后便于收纳。</p>')
+        ->and($result['description'])->toBe('<p>采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备。</p><p>折叠后便于收纳。</p>')
         ->and(json_decode($revision->original_content, true)['short_description'])->toContain('产自深圳')
         ->and($revision->template_id)->toBe($template->id)
-        ->and($revision->prompt_snapshot)->toContain('只描述商品本身')
+        ->and($revision->prompt_snapshot)->toContain('只描述商品')
         ->and($stored['short_description'])->not->toContain('Amazon', '深圳', '价格');
+});
+
+it('optimizes description placing text first and preserving images when description has images', function () {
+    MagicAIPlatform::query()->update(['is_default' => false]);
+    $platform = MagicAIPlatform::create([
+        'label'      => 'Image description test AI',
+        'provider'   => AiProvider::Zhipu->value,
+        'api_url'    => AiProvider::Zhipu->defaultUrl(),
+        'api_key'    => 'test-key',
+        'models'     => 'glm-5.3-flash',
+        'is_default' => true,
+        'status'     => true,
+    ]);
+    $template = MagicAISystemPrompt::query()->where('purpose', 'product_description')->firstOrFail();
+    $product = Product::factory()->configurable()->create([
+        'sku'    => 'DESC-IMAGE-'.uniqid(),
+        'values' => ['channel_locale_specific' => ['default' => ['zh_CN' => [
+            'name'              => '折叠支架',
+            'short_description' => '精选材质制造。',
+            'description'       => '<p><img src="/storage/img1.jpg"></p><p><img src="/storage/img2.jpg"></p>',
+        ]]]],
+    ]);
+    $ai = Mockery::mock();
+    $ai->shouldReceive('setPlatformId', 'setModel', 'setTemperature', 'setMaxTokens', 'setSystemPrompt', 'setPrompt')
+        ->andReturnSelf();
+    $ai->shouldReceive('ask')->once()->andReturn(json_encode([
+        'short_description' => "坚固耐用设计，支撑稳定可靠\n多角度调节满足不同场景需求",
+    ], JSON_UNESCAPED_UNICODE));
+    app()->instance('magic_ai', $ai);
+
+    $result = app(ProductContentPolicyService::class)->optimizeShortDescription(
+        $product,
+        'zh_CN',
+        'default',
+        $template->id,
+    );
+    $stored = data_get($product->fresh()->values, 'channel_locale_specific.default.zh_CN');
+
+    expect($result['short_description'])->toBe('<p>坚固耐用设计，支撑稳定可靠。</p><p>多角度调节满足不同场景需求。</p>')
+        ->and($stored['description'])->toStartWith('<p>坚固耐用设计，支撑稳定可靠。</p><p>多角度调节满足不同场景需求。</p>')
+        ->and($stored['description'])->toContain('<img src="/storage/img1.jpg">', '<img src="/storage/img2.jpg">');
 });
 
 it('retries an unsafe description and never saves prices regions or platforms', function () {

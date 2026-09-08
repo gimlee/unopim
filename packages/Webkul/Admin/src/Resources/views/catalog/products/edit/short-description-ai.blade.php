@@ -122,7 +122,13 @@
                     this.optimizing = Boolean(val);
                 });
                 this.$emitter?.on('product-description-ai:apply', (val) => {
-                    if (val) this.applyShortDescription(val);
+                    if (! val) return;
+                    if (typeof val === 'object') {
+                        if (val.short_description) this.applyShortDescription(val.short_description);
+                        if (val.description) this.applyDescription(val.description);
+                    } else {
+                        this.applyShortDescription(val);
+                    }
                 });
             },
 
@@ -193,7 +199,8 @@
 
                 readField(code) {
                     const editor = window.tinymce?.get(code)
-                        || (window.tinymce?.editors || []).find(e => e.id && e.id.includes(code));
+                        || (window.tinymce?.editors || []).find(e => e.id && e.id === code)
+                        || (window.tinymce?.editors || []).find(e => e.id && e.id.includes(code) && (code !== 'description' || !e.id.includes('short_description')));
                     if (editor) return editor.getContent();
 
                     const field = document.getElementById(code)
@@ -222,6 +229,26 @@
                     }
                 },
 
+                applyDescription(value) {
+                    const editor = window.tinymce?.get('description')
+                        || (window.tinymce?.editors || []).find(e => e.id && e.id === 'description')
+                        || (window.tinymce?.editors || []).find(e => e.id && e.id.includes('description') && !e.id.includes('short_description'));
+
+                    if (editor) {
+                        editor.setContent(value);
+                    }
+
+                    const field = document.getElementById('description')
+                        || document.querySelector('[name*="[description]"]:not([name*="[short_description]"])')
+                        || document.querySelector('textarea[name$="[description]"]:not([name*="[short_description]"])');
+
+                    if (field) {
+                        field.value = value;
+                        field.dispatchEvent(new Event('input', { bubbles: true }));
+                        field.dispatchEvent(new Event('change', { bubbles: true }));
+                    }
+                },
+
                 optimize() {
                     if (! this.selected || this.optimizing) return;
 
@@ -237,7 +264,12 @@
                         source_description: this.readField('description'),
                     }).then(response => {
                         const result = response.data.data;
-                        this.applyShortDescription(result.short_description);
+                        if (result?.short_description) {
+                            this.applyShortDescription(result.short_description);
+                        }
+                        if (result?.description) {
+                            this.applyDescription(result.description);
+                        }
                         this.$emitter?.emit('content-policy:revision-created', result);
                         this.emitFlash('success', response.data.message || 'AI 商品描述生成成功！');
                     }).catch(error => {

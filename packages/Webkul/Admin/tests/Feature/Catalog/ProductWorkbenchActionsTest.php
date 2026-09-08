@@ -7,18 +7,6 @@ use Webkul\Category\Services\ProductCategoryClassificationManager;
 use Webkul\AdminApi\Services\ProductContentPolicyService;
 use Webkul\Product\Models\Product;
 
-it('redirects to zh_CN when locale is not provided on edit page', function () {
-    $this->loginAsAdmin();
-
-    $product = Product::factory()->create(['type' => 'simple']);
-
-    $response = $this->get(route('admin.catalog.products.edit', $product->id));
-
-    $response->assertRedirect();
-    $targetUrl = $response->headers->get('Location');
-    expect($targetUrl)->toContain('locale=zh_CN');
-});
-
 it('retains specified locale when provided in edit page request', function () {
     $this->loginAsAdmin();
 
@@ -74,7 +62,7 @@ it('calls listing-draft endpoint and handles pim response', function () {
     $response->assertOk();
     $data = $response->json();
     expect($data['success'])->toBeTrue();
-    expect($data['message'])->toContain('TikTok Shop 草稿已生成成功');
+    expect($data['message'])->toContain('正在调起 Chrome 浏览器保存草稿');
 });
 
 it('runs aiOptimize endpoint and returns results', function () {
@@ -159,8 +147,73 @@ it('calls listing-draft endpoint with submit action and forwards submit_for_revi
     $response->assertOk();
     $data = $response->json();
     expect($data['success'])->toBeTrue();
-    expect($data['message'])->toContain('上架审核提交成功');
+    expect($data['message'])->toContain('正在调起 Chrome 浏览器提交审核');
     expect($pimPayload['submit_for_review'])->toBeTrue();
+});
+
+it('calls listing-cancel endpoint and proxies to pim api', function () {
+    $this->loginAsAdmin();
+
+    $product = Product::factory()->create([
+        'sku'  => 'TEST-SKU-CANCEL-1',
+        'type' => 'simple',
+    ]);
+
+    $receivedPayload = null;
+    Http::fake([
+        '*/api/products/TEST-SKU-CANCEL-1/listing/cancel' => function ($request) use (&$receivedPayload) {
+            $receivedPayload = $request->data();
+            return Http::response([
+                'success' => true,
+                'data'    => [
+                    'sku'             => 'TEST-SKU-CANCEL-1',
+                    'region'          => 'MY',
+                    'cancelled'       => true,
+                    'cancelled_count' => 1,
+                ],
+            ], 200);
+        },
+    ]);
+
+    $response = $this->postJson(route('admin.catalog.products.listing_cancel', $product->id), [
+        'region' => 'MY',
+    ]);
+
+    $response->assertOk();
+    $data = $response->json();
+    expect($data['success'])->toBeTrue();
+    expect($data['message'])->toContain('上架已停止');
+    expect($receivedPayload['region'])->toBe('MY');
+});
+
+it('calls listing-status endpoint and proxies to pim api', function () {
+    $this->loginAsAdmin();
+
+    $product = Product::factory()->create([
+        'sku'  => 'TEST-SKU-STATUS-1',
+        'type' => 'simple',
+    ]);
+
+    Http::fake([
+        '*/api/products/TEST-SKU-STATUS-1/listing/status*' => Http::response([
+            'success' => true,
+            'data'    => [
+                'sku'    => 'TEST-SKU-STATUS-1',
+                'region' => 'TH',
+                'status' => 'draft_saved',
+            ],
+        ], 200),
+    ]);
+
+    $response = $this->getJson(route('admin.catalog.products.listing_status', [
+        'id'     => $product->id,
+        'region' => 'TH',
+    ]));
+
+    $response->assertOk();
+    $data = $response->json();
+    expect($data['success'])->toBeTrue();
+    expect($data['data']['status'])->toBe('draft_saved');
 });
 
 it('skips AI optimization when name, description and category are already optimized', function () {

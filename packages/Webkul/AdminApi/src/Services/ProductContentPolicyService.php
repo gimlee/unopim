@@ -207,19 +207,40 @@ class ProductContentPolicyService
         $original = collect($original)->map(fn ($value): string => (string) $value)->all();
         $template = $this->descriptionTemplate($templateId);
         [$platform, $model] = $this->textPlatform();
+
+        $shortText = trim(strip_tags((string) ($original['short_description'] ?? '')));
+        $descHtml = (string) ($original['description'] ?? '');
+        $descText = trim(html_entity_decode(strip_tags($descHtml), ENT_QUOTES | ENT_HTML5, 'UTF-8'));
+
+        // 提取原 description 中的全部图片 <img>
+        $images = [];
+        preg_match_all('/<img\b[^>]*>/iu', $descHtml, $matches);
+        foreach ($matches[0] ?? [] as $img) {
+            $images[] = '<p>'.$img.'</p>';
+        }
+
+        // 综合简短描述与详细描述中的文字信息（若描述中仅有图片无文字，则仅以简短描述为输入）
+        $sourceTextParts = array_values(array_filter([$shortText, $descText], fn ($t) => $t !== ''));
+        $combinedText = implode("\n\n", array_unique($sourceTextParts));
+
         $payload = [
             'locale'     => $locale,
             'product'    => [
-                'name'              => trim(strip_tags($original['name'])),
-                'short_description' => trim(strip_tags($original['short_description'])),
-                'description'       => trim(html_entity_decode(strip_tags($original['description']), ENT_QUOTES | ENT_HTML5, 'UTF-8')),
-                'attributes'        => data_get($product->values ?: [], 'common.source_attributes'),
+                'name'                 => trim(strip_tags($original['name'])),
+                'short_description'    => $shortText,
+                'description'          => $descText,
+                'combined_description' => $combinedText,
+                'attributes'           => data_get($product->values ?: [], 'common.source_attributes'),
             ],
         ];
         $shortDescription = $this->requestShortDescription($payload, $platform, $model, $template);
 
+        $formattedParagraphs = $this->formatRichTextParagraphs($shortDescription);
+
         $optimized = $original;
-        $optimized['short_description'] = $this->formatRichTextParagraphs($shortDescription);
+        $optimized['short_description'] = $formattedParagraphs;
+        // 将优化后的文本段落置于最前，原有详情图片保留在后部
+        $optimized['description'] = $formattedParagraphs . implode('', $images);
 
         $revisionId = $this->persistRevision(
             $product,
@@ -233,13 +254,14 @@ class ProductContentPolicyService
             $model,
             'ai_description',
             $template,
-            ['short_description'],
+            ['short_description', 'description'],
         );
 
         return [
             'changed'           => true,
             'revision_id'       => $revisionId,
             'short_description' => $optimized['short_description'],
+            'description'       => $optimized['description'],
             'locale'            => $locale,
             'channel'           => $channel,
             'provider'          => $platform->label,
@@ -508,7 +530,7 @@ class ProductContentPolicyService
                 ->setMaxTokens((int) $template->max_tokens)
                 ->setSystemPrompt($this->descriptionSystemPrompt($template))
                 ->setPrompt(
-                    '请优化 Short Description。只返回 JSON：{"short_description":""}。不得返回 Markdown 或解释。'
+                    '请优化商品描述（综合参考简短描述与详细描述中的文字信息）。只返回 JSON：{"short_description":""}。不得返回 Markdown 或解释。'
                     ."目标语言：{$language}。全部内容必须使用目标语言，不得改用英文或其他语言。"
                     .'生成 2 至 4 个自然段，每段 1 至 2 个完整句子；JSON 字符串内使用 \n\n 分隔段落。'
                     .'每句话使用完整标点。'.$feedback."\n"

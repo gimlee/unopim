@@ -4,56 +4,98 @@
     ai-optimize-url="{{ route('admin.catalog.products.ai_optimize', $product->id) }}"
     listing-draft-url="{{ route('admin.catalog.products.listing_draft', $product->id) }}"
     listing-status-url="{{ route('admin.catalog.products.listing_status', $product->id) }}"
+    listing-cancel-url="{{ route('admin.catalog.products.listing_cancel', $product->id) }}"
 ></v-product-workbench-actions>
 
 @pushOnce('scripts')
     <script type="text/x-template" id="v-product-workbench-actions-template">
-        <div class="flex items-center gap-2">
+        <div class="flex flex-col gap-2 items-end">
+            <div class="flex items-center gap-2">
+                @if (bouncer()->hasPermission('catalog.products.edit'))
+                    <button
+                        type="button"
+                        class="secondary-button inline-flex items-center gap-1.5"
+                        :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
+                        @click="handleAiOptimize"
+                    >
+                        <img
+                            v-if="isAiOptimizing"
+                            class="h-4 w-4 animate-spin"
+                            src="{{ unopim_asset('images/spinner.svg') }}"
+                        />
+                        <span v-else class="icon-magic text-lg"></span>
+                        <span v-text="isAiOptimizing ? 'AI 优化中…' : 'AI 优化'"></span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="secondary-button inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
+                        :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
+                        @click="handleListingDraft"
+                    >
+                        <img
+                            v-if="isListingDrafting"
+                            class="h-4 w-4 animate-spin"
+                            src="{{ unopim_asset('images/spinner.svg') }}"
+                        />
+                        <span v-else class="icon-export text-lg"></span>
+                        <span v-text="isListingDrafting ? `上架草稿中 (${activeListingRegions.join(', ')})` : '上架草稿'"></span>
+                    </button>
+
+                    <button
+                        type="button"
+                        class="secondary-button inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800"
+                        :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
+                        @click="handleListingSubmit"
+                    >
+                        <img
+                            v-if="isListingSubmitting"
+                            class="h-4 w-4 animate-spin"
+                            src="{{ unopim_asset('images/spinner.svg') }}"
+                        />
+                        <span v-else class="icon-check text-lg"></span>
+                        <span v-text="isListingSubmitting ? `上架审核中 (${activeListingRegions.join(', ')})` : '上架审核'"></span>
+                    </button>
+
+                    <button
+                        v-if="isListingDrafting || isListingSubmitting"
+                        type="button"
+                        class="secondary-button inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100 dark:bg-rose-900/30 dark:text-rose-300 dark:border-rose-800"
+                        :disabled="isCancellingListing"
+                        @click="handleListingCancel"
+                    >
+                        <img
+                            v-if="isCancellingListing"
+                            class="h-4 w-4 animate-spin"
+                            src="{{ unopim_asset('images/spinner.svg') }}"
+                        />
+                        <span v-else class="icon-cross text-lg"></span>
+                        <span v-text="isCancellingListing ? '正在停止…' : '停止上架'"></span>
+                    </button>
+                @endif
+            </div>
+
             @if (bouncer()->hasPermission('catalog.products.edit'))
-                <button
-                    type="button"
-                    class="secondary-button inline-flex items-center gap-1.5"
-                    :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
-                    @click="handleAiOptimize"
-                >
-                    <img
-                        v-if="isAiOptimizing"
-                        class="h-4 w-4 animate-spin"
-                        src="{{ unopim_asset('images/spinner.svg') }}"
-                    />
-                    <span v-else class="icon-magic text-lg"></span>
-                    <span v-text="isAiOptimizing ? 'AI 优化中…' : 'AI 优化'"></span>
-                </button>
-
-                <button
-                    type="button"
-                    class="secondary-button inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
-                    :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
-                    @click="handleListingDraft"
-                >
-                    <img
-                        v-if="isListingDrafting"
-                        class="h-4 w-4 animate-spin"
-                        src="{{ unopim_asset('images/spinner.svg') }}"
-                    />
-                    <span v-else class="icon-export text-lg"></span>
-                    <span v-text="isListingDrafting ? '上架草稿中…' : '上架草稿'"></span>
-                </button>
-
-                <button
-                    type="button"
-                    class="secondary-button inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-900/30 dark:text-emerald-300 dark:border-emerald-800"
-                    :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
-                    @click="handleListingSubmit"
-                >
-                    <img
-                        v-if="isListingSubmitting"
-                        class="h-4 w-4 animate-spin"
-                        src="{{ unopim_asset('images/spinner.svg') }}"
-                    />
-                    <span v-else class="icon-check text-lg"></span>
-                    <span v-text="isListingSubmitting ? '上架审核中…' : '上架审核'"></span>
-                </button>
+                <div class="flex items-center gap-1.5 text-xs">
+                    <span class="text-gray-500 dark:text-gray-400 select-none">上架地区:</span>
+                    <button
+                        v-for="reg in candidateRegions"
+                        :key="reg.code"
+                        type="button"
+                        :disabled="isListingDrafting || isListingSubmitting"
+                        class="px-2 py-0.5 rounded border transition inline-flex items-center gap-1 select-none font-medium cursor-pointer"
+                        :class="selectedRegions.includes(reg.code)
+                            ? 'bg-blue-50 border-blue-400 text-blue-700 dark:bg-blue-900/40 dark:border-blue-500 dark:text-blue-300 font-semibold'
+                            : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300 dark:bg-cherry-900 dark:border-cherry-700 dark:text-gray-400'"
+                        :title="reg.name"
+                        @click="toggleRegion(reg.code)"
+                    >
+                        <svg v-if="selectedRegions.includes(reg.code)" class="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd" />
+                        </svg>
+                        <span v-text="reg.code"></span>
+                    </button>
+                </div>
             @endif
         </div>
     </script>
@@ -83,6 +125,10 @@
                     type: String,
                     required: true,
                 },
+                listingCancelUrl: {
+                    type: String,
+                    required: true,
+                },
             },
 
             data() {
@@ -90,9 +136,19 @@
                     isAiOptimizing: false,
                     isListingDrafting: false,
                     isListingSubmitting: false,
+                    isCancellingListing: false,
+                    activeListingRegions: [],
+                    candidateRegions: [
+                        { code: 'MY', name: '马来西亚' },
+                        { code: 'TH', name: '泰国' },
+                        { code: 'VN', name: '越南' },
+                        { code: 'PH', name: '菲律宾' },
+                        { code: 'SG', name: '新加坡' },
+                    ],
+                    selectedRegions: ['MY', 'TH'],
                     isFormDirty: false,
                     dirtyHandler: null,
-                    listingPollTimer: null,
+                    listingPollTimers: {},
                 };
             },
 
@@ -109,10 +165,7 @@
                     this.$emitter?.off('unsaved-changes:state', this.dirtyHandler);
                 }
 
-                if (this.listingPollTimer) {
-                    clearInterval(this.listingPollTimer);
-                    this.listingPollTimer = null;
-                }
+                this.clearAllPollTimers();
             },
 
             methods: {
@@ -191,8 +244,8 @@
                                     const descRes = await this.$axios.post(this.aiOptimizeUrl, { locale, channel, stage: 'description' });
                                     if (descRes.data?.data?.description?.skipped) {
                                         this.emitFlash('info', '商品描述已优化，跳过。');
-                                    } else if (descRes.data?.data?.description?.short_description) {
-                                        this.$emitter?.emit('product-description-ai:apply', descRes.data.data.description.short_description);
+                                    } else if (descRes.data?.data?.description) {
+                                        this.$emitter?.emit('product-description-ai:apply', descRes.data.data.description);
                                         this.emitFlash('success', '已完成商品描述优化！');
                                     }
                                 } catch (descErr) {
@@ -212,27 +265,157 @@
                     });
                 },
 
-                pollListingStatus(isSubmit) {
-                    if (this.listingPollTimer) {
-                        clearInterval(this.listingPollTimer);
-                        this.listingPollTimer = null;
+                toggleRegion(code) {
+                    if (this.selectedRegions.includes(code)) {
+                        if (this.selectedRegions.length === 1) {
+                            this.emitFlash('warning', '请至少保留一个上架地区。');
+                            return;
+                        }
+                        this.selectedRegions = this.selectedRegions.filter(c => c !== code);
+                    } else {
+                        this.selectedRegions.push(code);
                     }
+                },
+
+                clearPollTimer(region) {
+                    if (this.listingPollTimers[region]) {
+                        clearInterval(this.listingPollTimers[region]);
+                        delete this.listingPollTimers[region];
+                    }
+                },
+
+                clearAllPollTimers() {
+                    Object.keys(this.listingPollTimers).forEach(reg => {
+                        clearInterval(this.listingPollTimers[reg]);
+                    });
+                    this.listingPollTimers = {};
+                },
+
+                async handleListingCancel() {
+                    this.isCancellingListing = true;
+                    try {
+                        await this.$axios.post(this.listingCancelUrl, {});
+                        this.clearAllPollTimers();
+                        this.emitFlash('info', '已发送停止指令，正在终止上架进程并关闭浏览器...');
+                    } catch (error) {
+                        const msg = error.response?.data?.message || error.message || '停止上架请求失败';
+                        this.emitFlash('warning', msg);
+                    } finally {
+                        this.clearAllPollTimers();
+                        this.isListingDrafting = false;
+                        this.isListingSubmitting = false;
+                        this.isCancellingListing = false;
+                        this.activeListingRegions = [];
+                        this.emitFlash('success', '上架已停止，操作按钮已重置。');
+                    }
+                },
+
+                handleListingDraft() {
+                    this.runRegionalListing('draft', false);
+                },
+
+                handleListingSubmit() {
+                    this.runRegionalListing('submit', true);
+                },
+
+                runRegionalListing(action, isSubmit) {
+                    if (this.hasUnsavedChanges()) {
+                        const actionName = isSubmit ? '上架审核' : '上架草稿';
+                        this.emitFlash('warning', `当前商品信息有修改未保存，请先保存当前页面信息后再执行${actionName}。`);
+                        return;
+                    }
+
+                    if (! this.selectedRegions || ! this.selectedRegions.length) {
+                        this.emitFlash('warning', '请至少勾选一个上架地区（如 MY、TH）。');
+                        return;
+                    }
+
+                    const regionsToRun = [...this.selectedRegions];
+                    const actionLabel = isSubmit ? '上架审核' : '上架草稿';
+
+                    this.$emitter?.emit('open-confirm-modal', {
+                        title: actionLabel,
+                        message: `确定对该商品在选定地区 [${regionsToRun.join(', ')}] 并发执行 TikTok Shop ${actionLabel} 吗？系统将为各地区同时启动独立的 Chrome 浏览器窗口并行填报（若遇验证码请在对应浏览器中完成）。`,
+                        options: {
+                            btnAgree: `并发${actionLabel}`,
+                            btnDisagree: '取消',
+                            btnAgreeClass: 'primary-button',
+                            btnDisagreeClass: 'transparent-button',
+                        },
+                        agree: async () => {
+                            if (isSubmit) {
+                                this.isListingSubmitting = true;
+                            } else {
+                                this.isListingDrafting = true;
+                            }
+                            this.activeListingRegions = [...regionsToRun];
+                            this.emitFlash('info', `正在并发启动 [${regionsToRun.join(', ')}] 的 Chrome 浏览器执行 ${actionLabel}，请留意弹出的独立窗口...`);
+
+                            try {
+                                const tasks = regionsToRun.map(region => this.executeSingleRegionListing(region, action, isSubmit));
+                                const results = await Promise.allSettled(tasks);
+
+                                let successCount = 0;
+                                let failCount = 0;
+                                results.forEach((res) => {
+                                    if (res.status === 'fulfilled' && res.value?.status !== 'cancelled') {
+                                        successCount++;
+                                    } else {
+                                        failCount++;
+                                    }
+                                });
+
+                                if (failCount === 0) {
+                                    this.emitFlash('success', `选定地区 [${regionsToRun.join(', ')}] 的 ${actionLabel} 已全部成功完成！`);
+                                } else if (successCount > 0) {
+                                    this.emitFlash('warning', `[${regionsToRun.join(', ')}] 的 ${actionLabel} 执行完毕：${successCount} 个成功，${failCount} 个未完成/取消。`);
+                                }
+                            } catch (err) {
+                                this.emitFlash('error', err.message || '上架并发执行出现异常');
+                            } finally {
+                                this.clearAllPollTimers();
+                                this.isListingDrafting = false;
+                                this.isListingSubmitting = false;
+                                this.activeListingRegions = [];
+                            }
+                        }
+                    });
+                },
+
+                executeSingleRegionListing(region, action, isSubmit) {
+                    return new Promise((resolve, reject) => {
+                        this.$axios.post(this.listingDraftUrl, {
+                            region: region,
+                            action: action,
+                            submit_for_review: Boolean(isSubmit),
+                        }).then(response => {
+                            this.pollListingStatusForRegion(region, isSubmit, resolve, reject);
+                        }).catch(error => {
+                            const msg = error.response?.data?.message || `[${region}] 上架启动失败`;
+                            this.emitFlash('error', msg);
+                            reject(new Error(msg));
+                        });
+                    });
+                },
+
+                pollListingStatusForRegion(region, isSubmit, resolve, reject) {
+                    this.clearPollTimer(region);
 
                     let pollCount = 0;
                     const maxPolls = 150; // 5 分钟超时 (2秒 * 150)
+                    const url = `${this.listingStatusUrl}?region=${encodeURIComponent(region)}`;
 
-                    this.listingPollTimer = setInterval(() => {
+                    this.listingPollTimers[region] = setInterval(() => {
                         pollCount++;
                         if (pollCount > maxPolls) {
-                            clearInterval(this.listingPollTimer);
-                            this.listingPollTimer = null;
-                            this.isListingDrafting = false;
-                            this.isListingSubmitting = false;
-                            this.emitFlash('warning', '上架任务执行时间较长，请检查后台或已弹出的浏览器窗口。');
+                            this.clearPollTimer(region);
+                            const timeoutMsg = `[${region}] 上架任务执行时间较长，请检查后台或已弹出的浏览器窗口。`;
+                            this.emitFlash('warning', timeoutMsg);
+                            reject(new Error(timeoutMsg));
                             return;
                         }
 
-                        this.$axios.get(this.listingStatusUrl)
+                        this.$axios.get(url)
                             .then(response => {
                                 const data = response.data?.data;
                                 if (! data) return;
@@ -240,97 +423,28 @@
                                 const status = data.status;
 
                                 if (status === 'draft_saved' || status === 'form_filled') {
-                                    clearInterval(this.listingPollTimer);
-                                    this.listingPollTimer = null;
-                                    this.isListingDrafting = false;
-                                    this.isListingSubmitting = false;
-                                    this.emitFlash('success', 'TikTok Shop 草稿已生成并保存成功！');
+                                    this.clearPollTimer(region);
+                                    this.emitFlash('success', `[${region}] TikTok Shop 草稿已生成并保存成功！`);
+                                    resolve(data);
                                 } else if (status === 'submitted_for_review') {
-                                    clearInterval(this.listingPollTimer);
-                                    this.listingPollTimer = null;
-                                    this.isListingDrafting = false;
-                                    this.isListingSubmitting = false;
-                                    this.emitFlash('success', 'TikTok Shop 上架审核提交成功！');
+                                    this.clearPollTimer(region);
+                                    this.emitFlash('success', `[${region}] TikTok Shop 上架审核提交成功！`);
+                                    resolve(data);
+                                } else if (status === 'cancelled') {
+                                    this.clearPollTimer(region);
+                                    this.emitFlash('info', `[${region}] 上架已取消。`);
+                                    resolve(data);
                                 } else if (status === 'failed' || status === 'draft_save_unconfirmed') {
-                                    clearInterval(this.listingPollTimer);
-                                    this.listingPollTimer = null;
-                                    this.isListingDrafting = false;
-                                    this.isListingSubmitting = false;
+                                    this.clearPollTimer(region);
                                     const errorMsg = data.error || (status === 'draft_save_unconfirmed' ? '草稿保存未获权威确认' : '执行失败');
-                                    this.emitFlash('error', `上架自动化失败: ${errorMsg}`);
+                                    this.emitFlash('error', `[${region}] 上架自动化失败: ${errorMsg}`);
+                                    reject(new Error(`[${region}] 上架失败: ${errorMsg}`));
                                 }
                             })
                             .catch(() => {
                                 // 忽略偶发网络轮询错误，继续轮询
                             });
                     }, 2000);
-                },
-
-                handleListingDraft() {
-                    if (this.hasUnsavedChanges()) {
-                        this.emitFlash('warning', '当前商品信息有修改未保存，请先保存当前页面信息后再执行上架草稿。');
-                        return;
-                    }
-
-                    this.$emitter?.emit('open-confirm-modal', {
-                        title: '上架草稿',
-                        message: '确定对该商品执行 TikTok Shop 上架草稿吗？系统将调用 OpenCLI 启动 Chrome 浏览器自动填表并保存草稿（若遇验证码请在浏览器中完成）。',
-                        options: {
-                            btnAgree: '开始上架',
-                            btnDisagree: '取消',
-                            btnAgreeClass: 'primary-button',
-                            btnDisagreeClass: 'transparent-button',
-                        },
-                        agree: () => {
-                            this.isListingDrafting = true;
-                            this.emitFlash('info', 'TikTok Shop 上架自动化已启动，正在调起 Chrome 浏览器，请留意屏幕弹出的浏览器窗口...');
-                            this.$axios.post(this.listingDraftUrl, {
-                                region: 'MY',
-                                action: 'draft',
-                            })
-                            .then(response => {
-                                this.pollListingStatus(false);
-                            })
-                            .catch(error => {
-                                this.isListingDrafting = false;
-                                this.emitFlash('error', error.response?.data?.message || '上架草稿启动失败');
-                            });
-                        }
-                    });
-                },
-
-                handleListingSubmit() {
-                    if (this.hasUnsavedChanges()) {
-                        this.emitFlash('warning', '当前商品信息有修改未保存，请先保存当前页面信息后再执行上架审核。');
-                        return;
-                    }
-
-                    this.$emitter?.emit('open-confirm-modal', {
-                        title: '上架审核',
-                        message: '确定对该商品执行 TikTok Shop 上架审核吗？系统将调用 OpenCLI 启动 Chrome 浏览器自动填表并直接提交审核（若遇验证码请在浏览器中完成）。',
-                        options: {
-                            btnAgree: '提交审核',
-                            btnDisagree: '取消',
-                            btnAgreeClass: 'primary-button',
-                            btnDisagreeClass: 'transparent-button',
-                        },
-                        agree: () => {
-                            this.isListingSubmitting = true;
-                            this.emitFlash('info', 'TikTok Shop 上架自动化已启动，正在调起 Chrome 浏览器，请留意屏幕弹出的浏览器窗口...');
-                            this.$axios.post(this.listingDraftUrl, {
-                                region: 'MY',
-                                action: 'submit',
-                                submit_for_review: true,
-                            })
-                            .then(response => {
-                                this.pollListingStatus(true);
-                            })
-                            .catch(error => {
-                                this.isListingSubmitting = false;
-                                this.emitFlash('error', error.response?.data?.message || '上架审核启动失败');
-                            });
-                        }
-                    });
                 },
             }
         });

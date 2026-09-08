@@ -2267,9 +2267,11 @@ class ProductController extends Controller
         $product = $this->productRepository->findOrFail($id);
         $rootProduct = $product->parent ?: $product;
         $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+        $region = request()->query('region');
+        $queryParam = $region ? '?region=' . urlencode(strtoupper((string) $region)) : '';
 
         try {
-            $response = Http::timeout(15)->get("{$pimUrl}/api/products/{$rootProduct->sku}/listing/status");
+            $response = Http::timeout(15)->get("{$pimUrl}/api/products/{$rootProduct->sku}/listing/status{$queryParam}");
 
             if (! $response->successful()) {
                 $errorData = $response->json();
@@ -2291,6 +2293,51 @@ class ProductController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => '查询上架状态异常: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Cancel ongoing TikTok Shop listing automation via PIM API.
+     */
+    public function listingCancel(int $id): JsonResponse
+    {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+
+        $product = $this->productRepository->findOrFail($id);
+        $rootProduct = $product->parent ?: $product;
+        $region = request()->input('region');
+        $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+
+        try {
+            $payload = [];
+            if ($region) {
+                $payload['region'] = strtoupper((string) $region);
+            }
+
+            $response = Http::timeout(15)->post("{$pimUrl}/api/products/{$rootProduct->sku}/listing/cancel", $payload);
+
+            if (! $response->successful()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['detail'] ?? $errorData['message'] ?? ('PIM 响应错误 HTTP ' . $response->status());
+
+                return response()->json([
+                    'success' => false,
+                    'message' => '停止上架失败: ' . $errorMessage,
+                ], 422);
+            }
+
+            return response()->json([
+                'success' => true,
+                'message' => '上架已停止',
+                'data'    => $response->json('data'),
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => '停止上架请求异常: ' . $e->getMessage(),
             ], 500);
         }
     }

@@ -243,6 +243,8 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
             Route::post('{id}/listing-draft', 'listingDraft')->name('admin.catalog.products.listing_draft');
 
             Route::get('{id}/listing-status', 'listingStatus')->name('admin.catalog.products.listing_status');
+
+            Route::post('{id}/listing-cancel', 'listingCancel')->name('admin.catalog.products.listing_cancel');
         });
 
         Route::controller(ProductDescriptionAiController::class)->prefix('products/description-ai')->group(function () {
