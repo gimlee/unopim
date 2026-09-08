@@ -118,11 +118,19 @@
             mounted() {
                 this.$emitter?.on('product-name-ai:templates', this.openTemplates);
                 this.$emitter?.on('product-name-ai:optimize', this.optimizeFromButton);
+                this.$emitter?.on('product-name-ai:set-optimizing', (val) => {
+                    this.optimizing = Boolean(val);
+                });
+                this.$emitter?.on('product-name-ai:apply', (val) => {
+                    if (val) this.applyProductName(val);
+                });
             },
 
             beforeUnmount() {
                 this.$emitter?.off('product-name-ai:templates', this.openTemplates);
                 this.$emitter?.off('product-name-ai:optimize', this.optimizeFromButton);
+                this.$emitter?.off('product-name-ai:set-optimizing');
+                this.$emitter?.off('product-name-ai:apply');
             },
 
             methods: {

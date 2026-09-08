@@ -118,11 +118,19 @@
             mounted() {
                 this.$emitter?.on('product-description-ai:templates', this.openTemplates);
                 this.$emitter?.on('product-description-ai:optimize', this.optimizeFromButton);
+                this.$emitter?.on('product-description-ai:set-optimizing', (val) => {
+                    this.optimizing = Boolean(val);
+                });
+                this.$emitter?.on('product-description-ai:apply', (val) => {
+                    if (val) this.applyShortDescription(val);
+                });
             },
 
             beforeUnmount() {
                 this.$emitter?.off('product-description-ai:templates', this.openTemplates);
                 this.$emitter?.off('product-description-ai:optimize', this.optimizeFromButton);
+                this.$emitter?.off('product-description-ai:set-optimizing');
+                this.$emitter?.off('product-description-ai:apply');
             },
 
             methods: {

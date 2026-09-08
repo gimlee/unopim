@@ -1932,125 +1932,213 @@ class ProductController extends Controller
         $product = $this->productRepository->findOrFail($id);
         $rootProduct = $product->parent ?: $product;
 
+        $stage = request()->input('stage', 'all');
+        $runCategory = in_array($stage, ['all', 'category'], true);
+        $runName = in_array($stage, ['all', 'name'], true);
+        $runDescription = in_array($stage, ['all', 'description'], true);
+
         $results = [
             'category'    => null,
+            'name'        => null,
             'description' => null,
             'errors'      => [],
         ];
 
         // 1. AI 商品分类（如已完成则跳过）
-        $hasCategories = ! empty($rootProduct->values['categories'])
-            || ! empty(data_get($rootProduct->values, 'common.categories'))
-            || (method_exists($rootProduct, 'categories') && $rootProduct->categories()->exists());
+        if ($runCategory) {
+            $hasCategories = ! empty($rootProduct->values['categories'])
+                || ! empty(data_get($rootProduct->values, 'common.categories'))
+                || (method_exists($rootProduct, 'categories') && $rootProduct->categories()->exists());
 
-        $hasAiClassification = data_get($rootProduct->values, 'common.category_classification_method') === 'ai'
-            || (Schema::hasTable('product_category_assignments') && DB::table('product_category_assignments')
-                ->where('product_id', $rootProduct->id)
-                ->where('method', 'ai')
-                ->where('status', 'confirmed')
-                ->exists())
-            || (Schema::hasTable('product_category_classification_caches') && DB::table('product_category_classification_caches')
-                ->where('product_id', $rootProduct->id)
-                ->where('method', 'ai')
-                ->where('status', 'applied')
-                ->exists());
+            $hasAiClassification = data_get($rootProduct->values, 'common.category_classification_method') === 'ai'
+                || (Schema::hasTable('product_category_assignments') && DB::table('product_category_assignments')
+                    ->where('product_id', $rootProduct->id)
+                    ->where('method', 'ai')
+                    ->where('status', 'confirmed')
+                    ->exists())
+                || (Schema::hasTable('product_category_classification_caches') && DB::table('product_category_classification_caches')
+                    ->where('product_id', $rootProduct->id)
+                    ->where('method', 'ai')
+                    ->where('status', 'applied')
+                    ->exists());
 
-        $categoryAlreadyOptimized = $hasCategories && $hasAiClassification;
+            $categoryAlreadyOptimized = $hasCategories && $hasAiClassification;
 
-        if ($categoryAlreadyOptimized) {
-            $results['category'] = ['skipped' => true, 'message' => '分类已完成，跳过'];
-        } else {
-            try {
-                $platform = MagicAIPlatform::query()
-                    ->where('status', true)
-                    ->where('provider', '!=', AiProvider::ZhipuCodePlan->value)
-                    ->orderByDesc('is_default')
-                    ->orderBy('id')
-                    ->get()
-                    ->first(fn (MagicAIPlatform $candidate): bool => count($candidate->model_list) > 0);
+            if ($categoryAlreadyOptimized) {
+                $results['category'] = ['skipped' => true, 'message' => '分类已完成，跳过'];
+            } else {
+                try {
+                    $platform = MagicAIPlatform::query()
+                        ->where('status', true)
+                        ->where('provider', '!=', AiProvider::ZhipuCodePlan->value)
+                        ->orderByDesc('is_default')
+                        ->orderBy('id')
+                        ->get()
+                        ->first(fn (MagicAIPlatform $candidate): bool => count($candidate->model_list) > 0);
 
-                if ($platform) {
-                    $model = collect($platform->model_list)
-                        ->first(fn (string $name): bool => str_contains(strtolower($name), 'flash'))
-                        ?: $platform->model_list[0];
+                    if ($platform) {
+                        $model = collect($platform->model_list)
+                            ->first(fn (string $name): bool => str_contains(strtolower($name), 'flash'))
+                            ?: $platform->model_list[0];
 
-                    $classification = $classifier->classify($rootProduct, $platform, $model);
-                    $manager->remember($rootProduct, 'ai', $classification);
-                    $applied = $manager->apply($rootProduct, 'ai', auth()->guard('admin')->id());
-                    $results['category'] = $manager->present($applied);
-                } else {
-                    $results['errors'][] = '没有可用于分类的 Magic AI 平台';
+                        $classification = $classifier->classify($rootProduct, $platform, $model);
+                        $manager->remember($rootProduct, 'ai', $classification);
+                        $applied = $manager->apply($rootProduct, 'ai', auth()->guard('admin')->id());
+                        $results['category'] = $manager->present($applied);
+                    } else {
+                        $results['errors'][] = '没有可用于分类的 Magic AI 平台';
+                    }
+                } catch (Throwable $e) {
+                    report($e);
+                    $results['errors'][] = 'AI分类失败: ' . $e->getMessage();
                 }
-            } catch (Throwable $e) {
-                report($e);
-                $results['errors'][] = 'AI分类失败: ' . $e->getMessage();
             }
         }
 
         // 2. AI 优化商品名称（如已优化过则跳过）
-        $nameAlreadyOptimized = DB::table('product_content_revisions')
-            ->where('product_id', $rootProduct->id)
-            ->where('method', 'ai_name')
-            ->exists();
+        if ($runName) {
+            $nameAlreadyOptimized = DB::table('product_content_revisions')
+                ->where('product_id', $rootProduct->id)
+                ->where('method', 'ai_name')
+                ->exists();
 
-        if ($nameAlreadyOptimized) {
-            $results['name'] = ['skipped' => true, 'message' => '商品名称已优化，跳过'];
-        } else {
-            try {
-                $nameTemplates = $policy->nameTemplates();
-                $defaultNameTemplate = collect($nameTemplates)->firstWhere('is_default', true) ?: ($nameTemplates[0] ?? null);
+            if ($nameAlreadyOptimized) {
+                $results['name'] = ['skipped' => true, 'message' => '商品名称已优化，跳过'];
+            } else {
+                try {
+                    $nameTemplates = $policy->nameTemplates();
+                    $defaultNameTemplate = collect($nameTemplates)->firstWhere('is_default', true) ?: ($nameTemplates[0] ?? null);
 
-                if ($defaultNameTemplate) {
-                    $localeCode = request()->input('locale') ?: 'zh_CN';
-                    $channelCode = request()->input('channel') ?: core()->getDefaultChannelCode();
+                    if ($defaultNameTemplate) {
+                        $localeCode = request()->input('locale') ?: 'zh_CN';
+                        $channelCode = request()->input('channel') ?: core()->getDefaultChannelCode();
 
-                    $nameResult = $policy->optimizeProductName(
-                        $rootProduct,
-                        $localeCode,
-                        $channelCode,
-                        (int) $defaultNameTemplate['id']
-                    );
-                    $results['name'] = $nameResult;
-                } else {
-                    $results['errors'][] = '未找到商品名称优化模板';
+                        $nameResult = $policy->optimizeProductName(
+                            $rootProduct,
+                            $localeCode,
+                            $channelCode,
+                            (int) $defaultNameTemplate['id']
+                        );
+                        $results['name'] = $nameResult;
+                    } else {
+                        $results['errors'][] = '未找到商品名称优化模板';
+                    }
+                } catch (Throwable $e) {
+                    report($e);
+                    $results['errors'][] = 'AI名称优化失败: ' . $e->getMessage();
                 }
-            } catch (Throwable $e) {
-                report($e);
-                $results['errors'][] = 'AI名称优化失败: ' . $e->getMessage();
             }
         }
 
         // 3. AI 优化商品描述（如已优化过则跳过）
-        $descAlreadyOptimized = DB::table('product_content_revisions')
-            ->where('product_id', $rootProduct->id)
-            ->whereIn('method', ['ai', 'ai_description'])
-            ->exists();
+        if ($runDescription) {
+            $descAlreadyOptimized = DB::table('product_content_revisions')
+                ->where('product_id', $rootProduct->id)
+                ->whereIn('method', ['ai', 'ai_description'])
+                ->exists();
 
-        if ($descAlreadyOptimized) {
-            $results['description'] = ['skipped' => true, 'message' => '商品描述已优化，跳过'];
-        } else {
-            try {
-                $templates = $policy->descriptionTemplates();
-                $defaultTemplate = collect($templates)->firstWhere('is_default', true) ?: ($templates[0] ?? null);
+            if ($descAlreadyOptimized) {
+                $results['description'] = ['skipped' => true, 'message' => '商品描述已优化，跳过'];
+            } else {
+                try {
+                    $templates = $policy->descriptionTemplates();
+                    $defaultTemplate = collect($templates)->firstWhere('is_default', true) ?: ($templates[0] ?? null);
 
-                if ($defaultTemplate) {
-                    $localeCode = request()->input('locale') ?: 'zh_CN';
-                    $channelCode = request()->input('channel') ?: core()->getDefaultChannelCode();
+                    if ($defaultTemplate) {
+                        $localeCode = request()->input('locale') ?: 'zh_CN';
+                        $channelCode = request()->input('channel') ?: core()->getDefaultChannelCode();
 
-                    $descResult = $policy->optimizeShortDescription(
-                        $rootProduct,
-                        $localeCode,
-                        $channelCode,
-                        (int) $defaultTemplate['id']
-                    );
-                    $results['description'] = $descResult;
-                } else {
-                    $results['errors'][] = '未找到商品描述模板';
+                        $descResult = $policy->optimizeShortDescription(
+                            $rootProduct,
+                            $localeCode,
+                            $channelCode,
+                            (int) $defaultTemplate['id']
+                        );
+                        $results['description'] = $descResult;
+                    } else {
+                        $results['errors'][] = '未找到商品描述模板';
+                    }
+                } catch (Throwable $e) {
+                    report($e);
+                    $results['errors'][] = 'AI描述优化失败: ' . $e->getMessage();
                 }
-            } catch (Throwable $e) {
-                report($e);
-                $results['errors'][] = 'AI描述优化失败: ' . $e->getMessage();
             }
+        }
+
+        // Single stage responses
+        if ($stage === 'category') {
+            if (! empty($results['category']['skipped'])) {
+                return response()->json([
+                    'success' => true,
+                    'stage'   => 'category',
+                    'message' => '分类已完成，跳过。',
+                    'data'    => $results,
+                ]);
+            }
+            if (! empty($results['category'])) {
+                return response()->json([
+                    'success' => true,
+                    'stage'   => 'category',
+                    'message' => '已完成商品分类优化！',
+                    'data'    => $results,
+                ]);
+            }
+            return response()->json([
+                'success' => false,
+                'stage'   => 'category',
+                'message' => '商品分类优化失败: ' . implode('; ', $results['errors']),
+                'data'    => $results,
+            ], 422);
+        }
+
+        if ($stage === 'name') {
+            if (! empty($results['name']['skipped'])) {
+                return response()->json([
+                    'success' => true,
+                    'stage'   => 'name',
+                    'message' => '商品名称已优化，跳过。',
+                    'data'    => $results,
+                ]);
+            }
+            if (! empty($results['name'])) {
+                return response()->json([
+                    'success' => true,
+                    'stage'   => 'name',
+                    'message' => '已完成商品名称优化！',
+                    'data'    => $results,
+                ]);
+            }
+            return response()->json([
+                'success' => false,
+                'stage'   => 'name',
+                'message' => '商品名称优化失败: ' . implode('; ', $results['errors']),
+                'data'    => $results,
+            ], 422);
+        }
+
+        if ($stage === 'description') {
+            if (! empty($results['description']['skipped'])) {
+                return response()->json([
+                    'success' => true,
+                    'stage'   => 'description',
+                    'message' => '商品描述已优化，跳过。',
+                    'data'    => $results,
+                ]);
+            }
+            if (! empty($results['description'])) {
+                return response()->json([
+                    'success' => true,
+                    'stage'   => 'description',
+                    'message' => '已完成商品描述优化！',
+                    'data'    => $results,
+                ]);
+            }
+            return response()->json([
+                'success' => false,
+                'stage'   => 'description',
+                'message' => '商品描述优化失败: ' . implode('; ', $results['errors']),
+                'data'    => $results,
+            ], 422);
         }
 
         $allSkipped = (! empty($results['category']['skipped']))
@@ -2148,11 +2236,14 @@ class ProductController extends Controller
                 ], 422);
             }
 
-            $successLabel = $isSubmit ? 'TikTok Shop 上架审核提交成功！' : 'TikTok Shop 草稿已生成成功！';
+            $launchMessage = $isSubmit
+                ? 'TikTok Shop 上架自动化已启动，正在调起 Chrome 浏览器提交审核...'
+                : 'TikTok Shop 上架自动化已启动，正在调起 Chrome 浏览器保存草稿...';
 
             return response()->json([
                 'success' => true,
-                'message' => $successLabel,
+                'status'  => 'processing',
+                'message' => $launchMessage,
                 'data'    => $response->json('data'),
             ]);
         } catch (Throwable $e) {
@@ -2162,6 +2253,44 @@ class ProductController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => "{$failedLabel}: " . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Get the latest TikTok Shop listing automation status from PIM API.
+     */
+    public function listingStatus(int $id): JsonResponse
+    {
+        abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
+
+        $product = $this->productRepository->findOrFail($id);
+        $rootProduct = $product->parent ?: $product;
+        $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+
+        try {
+            $response = Http::timeout(15)->get("{$pimUrl}/api/products/{$rootProduct->sku}/listing/status");
+
+            if (! $response->successful()) {
+                $errorData = $response->json();
+                $errorMessage = $errorData['detail'] ?? $errorData['message'] ?? ('PIM 响应错误 HTTP ' . $response->status());
+
+                return response()->json([
+                    'success' => false,
+                    'message' => '获取上架状态失败: ' . $errorMessage,
+                ], 422);
+            }
+
+            return response()->json([
+                'success' => true,
+                'data'    => $response->json('data'),
+            ]);
+        } catch (Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'success' => false,
+                'message' => '查询上架状态异常: ' . $e->getMessage(),
             ], 500);
         }
     }

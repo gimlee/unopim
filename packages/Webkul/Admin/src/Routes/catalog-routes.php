@@ -241,6 +241,8 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
             Route::post('{id}/ai-optimize', 'aiOptimize')->name('admin.catalog.products.ai_optimize');
 
             Route::post('{id}/listing-draft', 'listingDraft')->name('admin.catalog.products.listing_draft');
+
+            Route::get('{id}/listing-status', 'listingStatus')->name('admin.catalog.products.listing_status');
         });
 
         Route::controller(ProductDescriptionAiController::class)->prefix('products/description-ai')->group(function () {
