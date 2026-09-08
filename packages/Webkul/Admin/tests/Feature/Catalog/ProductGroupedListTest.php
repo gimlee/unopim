@@ -152,10 +152,12 @@ it('shows SKU price ranges and hides redundant classification diagnostics on con
 
     $attributes = collect([
         ['code' => 'price', 'type' => 'price', 'label' => 'Price'],
+        ['code' => 'short_description', 'type' => 'textarea', 'label' => 'Short Description'],
         ['code' => 'category_classification_status', 'type' => 'text', 'label' => 'Category Classification Status'],
         ['code' => 'category_classification_method', 'type' => 'text', 'label' => 'Category Classification Method'],
         ['code' => 'category_classification_confidence', 'type' => 'text', 'label' => 'Category Classification Confidence'],
         ['code' => 'category_classification_evidence', 'type' => 'textarea', 'label' => 'Category Classification Evidence'],
+        ['code' => 'meta_description', 'type' => 'textarea', 'label' => 'Meta Description'],
     ])->map(function (array $definition, int $position) use ($mapping): Attribute {
         $attribute = Attribute::query()->where('code', $definition['code'])->first()
             ?? Attribute::factory()->create([
@@ -203,7 +205,7 @@ it('shows SKU price ranges and hides redundant classification diagnostics on con
     $response = $this->get(route('admin.catalog.products.edit', $parent->id))->assertOk();
     $content = $response->getContent();
 
-    expect($attributes)->toHaveCount(5)
+    expect($attributes)->toHaveCount(7)
         ->and(str_contains($content, 'SKU 价格'))->toBeTrue()
         ->and(str_contains($content, 'CNY(人民币)'))->toBeTrue()
         ->and(str_contains($content, '12.50'))->toBeTrue()
@@ -214,8 +216,12 @@ it('shows SKU price ranges and hides redundant classification diagnostics on con
         ->and(str_contains($content, 'Category Classification Method'))->toBeFalse()
         ->and(str_contains($content, 'Category Classification Confidence'))->toBeFalse()
         ->and(str_contains($content, 'Category Classification Evidence'))->toBeFalse()
+        ->and(str_contains($content, 'Meta Description'))->toBeFalse()
         ->and(str_contains($content, '商品描述优化记录'))->toBeTrue()
+        ->and(str_contains($content, 'changedFields(revision)'))->toBeTrue()
+        ->and(str_contains($content, 'whitespace-pre-line'))->toBeTrue()
         ->and(str_contains($content, '商品描述优化模板'))->toBeTrue()
+        ->and(str_contains($content, 'AI商品描述'))->toBeTrue()
         ->and(str_contains($content, 'product-description-ai:optimize'))->toBeTrue()
         ->and(str_contains($content, 'name="values[channel_locale_specific][default][en_US][price]'))->toBeFalse();
 });
@@ -229,6 +235,8 @@ it('renders the expandable variations component on the Products page', function 
         ->assertSee('<template v-if="isLoading">', false)
         ->assertDontSee('shimmer.datagrid.table.body :isMultiRow="true" v-if=', false)
         ->assertSee('gridTemplateColumns', false)
+        ->assertSee('text-xs font-medium tabular-nums tracking-tight', false)
+        ->assertSee('gap-0.5 select-none', false)
         ->assertSee('copySku(variation.sku)', false)
         ->assertSee('复制 SKU', false)
         ->assertSee('Variations / SKU')

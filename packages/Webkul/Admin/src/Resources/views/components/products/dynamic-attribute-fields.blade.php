@@ -179,7 +179,7 @@
                         data-no-toggle
                         @click="$emitter.emit('product-description-ai:optimize')"
                     >
-                        AI 优化
+                        AI商品描述
                     </button>
                 @endif
 

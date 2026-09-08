@@ -10,6 +10,7 @@ use Webkul\AdminApi\Http\Controllers\API\Catalog\CategoryFieldController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ConfigurableProductController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ContentPolicyController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\MediaFileController;
+use Webkul\AdminApi\Http\Controllers\API\Catalog\ProductListingExceptionController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\SimpleProductController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\VariantStructureController;
 
@@ -130,6 +131,10 @@ Route::group([
     Route::controller(ContentPolicyController::class)->prefix('content-policy')->group(function () {
         Route::get('forbidden-words', 'words')->name('admin.api.content_policy.words');
         Route::post('products/{sku}/optimize-description', 'optimize')->name('admin.api.content_policy.optimize');
+    });
+
+    Route::controller(ProductListingExceptionController::class)->prefix('listing-exceptions')->group(function () {
+        Route::post('products/{sku}', 'store')->name('admin.api.listing_exceptions.store');
     });
 
     /** Products API Routes */

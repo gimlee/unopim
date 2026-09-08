@@ -82,6 +82,11 @@ return [
         'sort'  => 3,
     ], [
         'key'   => 'catalog.products.edit',
+        'name'  => '处理商品上架异常',
+        'route' => 'admin.catalog.products.listing_exceptions.update',
+        'sort'  => 3,
+    ], [
+        'key'   => 'catalog.products.edit',
         'name'  => 'admin::app.acl.edit',
         'route' => 'admin.catalog.products.attribute_groups',
         'sort'  => 3,

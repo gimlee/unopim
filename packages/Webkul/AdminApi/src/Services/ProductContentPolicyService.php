@@ -101,22 +101,42 @@ class ProductContentPolicyService
             report($error);
             $aiError = mb_substr($error->getMessage(), 0, 1000);
             $method = 'ai_fallback';
-            $optimized = collect($original)
-                ->map(fn (string $value): string => $this->neutralize($value))
-                ->all();
+            $safeDescription = $this->sanitizeDescriptionPolicy($original['description']);
+            $safeShortDescription = $this->formatReadableCopy(
+                $this->sanitizeDescriptionPolicy($original['short_description'])
+            ) ?: $this->formatReadableCopy($safeDescription);
+
+            if ($safeShortDescription === '' || $this->formatReadableCopy($safeDescription) === '') {
+                throw new RuntimeException('AI 不可用，且原文移除价格、地区、平台及销售信息后没有足够的安全商品描述。', previous: $error);
+            }
+
+            $optimized = [
+                'name'              => $this->neutralize($original['name']),
+                'short_description' => $safeShortDescription,
+                'description'       => $safeDescription,
+            ];
         }
 
         // The model is asked to remove every term, but enforce the policy
         // deterministically as a final guard before saving or listing.
         if ($this->scan($optimized) !== []) {
-            $optimized = collect($optimized)
-                ->map(fn (string $value): string => $this->neutralize($value))
-                ->all();
+            $optimized['name'] = $this->neutralize($optimized['name']);
+            $optimized['short_description'] = $this->formatReadableCopy($this->sanitizeDescriptionPolicy($optimized['short_description']));
+            $optimized['description'] = $this->sanitizeDescriptionPolicy($optimized['description']);
         }
 
         $remaining = $this->scan($optimized);
         if ($remaining !== []) {
             throw new RuntimeException('AI 优化后仍包含违禁词：'.implode('、', $remaining));
+        }
+
+        $descriptionViolations = $this->descriptionPolicyViolations([
+            'short_description' => $optimized['short_description'],
+            'description'       => $optimized['description'],
+        ]);
+
+        if ($descriptionViolations !== []) {
+            throw new RuntimeException('商品描述优化后仍包含：'.implode('、', $descriptionViolations));
         }
 
         $revisionId = $this->persistRevision(
@@ -196,32 +216,10 @@ class ProductContentPolicyService
                 'attributes'        => data_get($product->values ?: [], 'common.source_attributes'),
             ],
         ];
-        $response = magic_ai()
-            ->setPlatformId($platform->id)
-            ->setModel($model)
-            ->setTemperature((float) $template->temperature)
-            ->setMaxTokens((int) $template->max_tokens)
-            ->setSystemPrompt($this->descriptionSystemPrompt($template))
-            ->setPrompt(
-                '请优化 Short Description。只返回 JSON：{"short_description":""}。不得返回 Markdown 或解释。'."\n"
-                .mb_substr(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 30000),
-                'text'
-            )
-            ->ask();
-        $decoded = $this->decodeJson($response);
-        $shortDescription = trim(strip_tags((string) ($decoded['short_description'] ?? '')));
-
-        if ($shortDescription === '') {
-            throw new RuntimeException('AI 没有返回有效的 Short Description。');
-        }
+        $shortDescription = $this->requestShortDescription($payload, $platform, $model, $template);
 
         $optimized = $original;
-        $optimized['short_description'] = $this->neutralize($shortDescription);
-        $remaining = $this->scan(['short_description' => $optimized['short_description']]);
-
-        if ($remaining !== []) {
-            throw new RuntimeException('AI 优化后的 Short Description 仍包含违禁词：'.implode('、', $remaining));
-        }
+        $optimized['short_description'] = $this->formatRichTextParagraphs($shortDescription);
 
         $revisionId = $this->persistRevision(
             $product,
@@ -325,21 +323,39 @@ class ProductContentPolicyService
             'forbidden_words' => $matched,
             'product'         => $visible,
         ];
-        $response = magic_ai()
-            ->setPlatformId($platform->id)
-            ->setModel($model)
-            ->setTemperature((float) $template->temperature)
-            ->setMaxTokens((int) $template->max_tokens)
-            ->setSystemPrompt($this->descriptionSystemPrompt($template))
-            ->setPrompt(
-                '改写商品文案，确保 forbidden_words 中的词不再出现。只返回 JSON：'
-                .'{"name":"","short_description":"","description":""}。description 返回纯文本。\n'
-                .mb_substr(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 30000),
-                'text'
-            )
-            ->ask();
+        $feedback = '';
 
-        return $this->decodeJson($response);
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $response = magic_ai()
+                ->setPlatformId($platform->id)
+                ->setModel($model)
+                ->setTemperature((float) $template->temperature)
+                ->setMaxTokens((int) $template->max_tokens)
+                ->setSystemPrompt($this->descriptionSystemPrompt($template))
+                ->setPrompt(
+                    '改写商品文案，确保 forbidden_words 中的词不再出现。只返回 JSON：'
+                    .'{"name":"","short_description":"","description":""}。description 返回纯文本并使用空行分隔自然段。'
+                    .$feedback."\n"
+                    .mb_substr(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 30000),
+                    'text'
+                )
+                ->ask();
+            $decoded = $this->decodeJson($response);
+            $decoded['short_description'] = $this->formatReadableCopy((string) ($decoded['short_description'] ?? ''));
+            $decoded['description'] = $this->formatReadableCopy((string) ($decoded['description'] ?? ''));
+            $violations = $this->descriptionPolicyViolations([
+                'short_description' => $decoded['short_description'],
+                'description'       => $decoded['description'],
+            ]);
+
+            if ($violations === []) {
+                return $decoded;
+            }
+
+            $feedback = '\n上一版仍然包含'.implode('、', $violations).'；本次必须删除相关句子，不得换一种说法继续保留。';
+        }
+
+        throw new RuntimeException('AI 优化后的商品描述仍包含：'.implode('、', $violations));
     }
 
     protected function descriptionTemplate(?int $id = null): MagicAISystemPrompt
@@ -359,7 +375,157 @@ class ProductContentPolicyService
 
     protected function descriptionSystemPrompt(MagicAISystemPrompt $template): string
     {
-        return trim($template->tone)."\n\n必须遵守：只描述商品自身信息；不得提及产地、销售目的、销售平台或销售渠道；句子完整通顺；不得虚构事实。";
+        return trim($template->tone)."\n\n必须遵守：只描述商品自身可验证的信息；不得出现任何价格、金额、币种、折扣或促销信息；不得出现国家、城市、产地、发货地、目标市场或销售地区；不得出现任何电商平台、店铺、销售渠道、上架、批发、转售或销售目的信息。使用自然段组织内容，段落之间用空行分隔；每个句子必须有完整标点，表达自然、通顺、人类可读，不得堆砌关键词或虚构事实。";
+    }
+
+    /**
+     * @param  array<string, mixed>  $payload
+     */
+    protected function requestShortDescription(
+        array $payload,
+        MagicAIPlatform $platform,
+        string $model,
+        MagicAISystemPrompt $template
+    ): string {
+        $feedback = '';
+        $violations = [];
+        $locale = (string) ($payload['locale'] ?? 'zh_CN');
+        $language = $this->descriptionLanguageInstruction($locale);
+
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $response = magic_ai()
+                ->setPlatformId($platform->id)
+                ->setModel($model)
+                ->setTemperature((float) $template->temperature)
+                ->setMaxTokens((int) $template->max_tokens)
+                ->setSystemPrompt($this->descriptionSystemPrompt($template))
+                ->setPrompt(
+                    '请优化 Short Description。只返回 JSON：{"short_description":""}。不得返回 Markdown 或解释。'
+                    ."目标语言：{$language}。全部内容必须使用目标语言，不得改用英文或其他语言。"
+                    .'生成 2 至 4 个自然段，每段 1 至 2 个完整句子；JSON 字符串内使用 \n\n 分隔段落。'
+                    .'每句话使用完整标点。'.$feedback."\n"
+                    .mb_substr(json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 30000),
+                    'text'
+                )
+                ->ask();
+            $decoded = $this->decodeJson($response);
+            $shortDescription = $this->formatReadableCopy((string) ($decoded['short_description'] ?? ''));
+
+            if ($shortDescription === '') {
+                $violations = ['空内容'];
+            } else {
+                $violations = array_values(array_unique(array_merge(
+                    $this->descriptionPolicyViolations(['short_description' => $shortDescription]),
+                    $this->descriptionPresentationViolations($shortDescription, $locale),
+                )));
+            }
+
+            if ($violations === []) {
+                return $shortDescription;
+            }
+
+            $feedback = '\n上一版仍存在以下问题：'.implode('、', $violations).'。请严格按目标语言和段落要求重新生成。';
+        }
+
+        throw new RuntimeException('AI 优化后的 Short Description 仍不符合要求：'.implode('、', $violations));
+    }
+
+    /** @param array<string, mixed> $content */
+    protected function descriptionPolicyViolations(array $content): array
+    {
+        $visible = collect($content)
+            ->filter(fn (mixed $value): bool => is_scalar($value) || $value instanceof \Stringable)
+            ->map(fn (mixed $value): string => html_entity_decode(strip_tags((string) $value), ENT_QUOTES | ENT_HTML5, 'UTF-8'))
+            ->implode("\n");
+        $violations = [];
+        $hasKnownPlatform = collect(config('content_policy.default_forbidden_words', []))
+            ->contains(fn (string $word): bool => preg_match($this->pattern($word), $visible) === 1);
+
+        if ($hasKnownPlatform || $this->scan($content) !== [] || preg_match('/(?:电商|购物|销售|线上)平台|销售渠道|线上商城|网店|店铺|marketplace|e[ -]?commerce platform|online (?:platform|store|shop)/iu', $visible)) {
+            $violations[] = '电商平台或销售渠道信息';
+        }
+
+        if (preg_match('/(?:价格|售价|单价|零售价|批发价|促销价|优惠价|折扣价|到手价|price|priced|pricing|cost)\s*[:：]?\s*(?:[A-Z]{3}|RM|RMB|[$¥￥€£])?\s*\d|[$¥￥€£]\s*\d|\b(?:RM|MYR|THB|USD|CNY|RMB|EUR|GBP)\b\s*[:：]?\s*\d|\d+(?:[.,]\d+)?\s*(?:元|人民币|美元|美金|马币|令吉|泰铢|บาท|\b(?:RM|MYR|THB|USD|CNY|RMB|EUR|GBP)\b)/iu', $visible)) {
+            $violations[] = '价格、金额或币种信息';
+        }
+
+        if (preg_match('/(?:产地|原产地|原产国|制造地|生产地|发货地|供应商所在地|销售地区|销售区域|目标市场|销往|面向.{0,12}(?:市场|地区)|(?:适合|适用于).{0,12}(?:市场|地区))|\b(?:Malaysia|Thailand|China|Vietnam|Indonesia|Singapore|United States|USA|MY|TH|CN|VN|ID|SG)\b|马来西亚|泰国|中国|越南|印度尼西亚|印尼|新加坡|美国/iu', $visible)) {
+            $violations[] = '国家、地区、产地或目标市场信息';
+        }
+
+        if (preg_match('/(?:适合|适用于|用于|面向).{0,24}(?:销售|转售|批发|零售|上架)|(?:销售|上架|转售|批发|零售)(?:用途|目的|渠道|平台|店铺|市场)|(?:sell|selling|resale|wholesale|retail|listing).{0,30}(?:platform|marketplace|store|shop|purpose|channel)/iu', $visible)) {
+            $violations[] = '销售目的或上架信息';
+        }
+
+        return array_values(array_unique($violations));
+    }
+
+    protected function formatReadableCopy(string $value): string
+    {
+        $text = preg_replace('/<\s*br\s*\/?\s*>/iu', "\n", $value) ?? $value;
+        $text = preg_replace('/<\/\s*(?:p|div|li|h[1-6])\s*>/iu', "\n\n", $text) ?? $text;
+        $text = html_entity_decode(strip_tags($text), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $text = str_replace(["\r\n", "\r"], "\n", $text);
+        $paragraphs = preg_split('/\n+/u', $text) ?: [];
+
+        if (count(array_filter($paragraphs, 'trim')) === 1) {
+            $sentences = preg_split('/(?<=[。！？!?])\s*|(?<=\.)\s+/u', trim($text), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+            if (count($sentences) > 1) {
+                $paragraphs = $sentences;
+            }
+        }
+
+        return collect($paragraphs)
+            ->map(fn (string $paragraph): string => preg_replace('/[\p{Z}\t]+/u', ' ', trim($paragraph)) ?? trim($paragraph))
+            ->filter()
+            ->map(function (string $paragraph): string {
+                if (preg_match('/[。！？.!?；;：:]$/u', $paragraph)) {
+                    return $paragraph;
+                }
+
+                return $paragraph.(preg_match('/[\x{3400}-\x{9fff}]/u', $paragraph) ? '。' : '.');
+            })
+            ->implode("\n\n");
+    }
+
+    protected function formatRichTextParagraphs(string $value): string
+    {
+        return collect(explode("\n\n", $this->formatReadableCopy($value)))
+            ->map(fn (string $paragraph): string => trim($paragraph))
+            ->filter()
+            ->map(fn (string $paragraph): string => '<p>'.htmlspecialchars($paragraph, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</p>')
+            ->implode('');
+    }
+
+    /** @return array<int, string> */
+    protected function descriptionPresentationViolations(string $value, string $locale): array
+    {
+        $violations = [];
+        $paragraphs = preg_split('/\n{2,}/u', trim($value), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+
+        if (count($paragraphs) < 2) {
+            $violations[] = '缺少自然段';
+        }
+
+        if (str_starts_with(strtolower($locale), 'zh') && preg_match_all('/\p{Han}/u', $value) < 6) {
+            $violations[] = '未使用简体中文';
+        }
+
+        return $violations;
+    }
+
+    protected function descriptionLanguageInstruction(string $locale): string
+    {
+        $normalized = strtolower($locale);
+
+        return match (true) {
+            str_starts_with($normalized, 'zh') => '简体中文',
+            str_starts_with($normalized, 'ms') => '马来语',
+            str_starts_with($normalized, 'th') => '泰语',
+            str_starts_with($normalized, 'en') => '英语',
+            default                            => $locale,
+        };
     }
 
     /**
@@ -404,7 +570,7 @@ class ProductContentPolicyService
                 'method'            => $method,
                 'template_id'       => $template->id,
                 'template_title'    => $template->title,
-                'prompt_snapshot'   => $template->tone,
+                'prompt_snapshot'   => $this->descriptionSystemPrompt($template),
                 'created_at'        => now(),
                 'updated_at'        => now(),
             ]);
@@ -418,20 +584,44 @@ class ProductContentPolicyService
      */
     protected function normalizeRewrite(array $original, array $rewritten): array
     {
-        $description = trim(strip_tags((string) ($rewritten['description'] ?? '')));
+        $description = $this->formatReadableCopy((string) ($rewritten['description'] ?? ''));
+        $shortDescription = $this->formatReadableCopy((string) ($rewritten['short_description'] ?? ''));
         $images = [];
         preg_match_all('/<img\b[^>]*>/iu', $original['description'], $matches);
         foreach ($matches[0] ?? [] as $image) {
             $images[] = '<p>'.$image.'</p>';
         }
 
+        $descriptionHtml = collect(explode("\n\n", $description))
+            ->filter()
+            ->map(fn (string $paragraph): string => '<p>'.htmlspecialchars($paragraph, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8').'</p>')
+            ->implode('');
+
         return [
             'name'              => trim((string) ($rewritten['name'] ?? '')) ?: $original['name'],
-            'short_description' => trim((string) ($rewritten['short_description'] ?? '')) ?: $original['short_description'],
+            'short_description' => $shortDescription ?: $original['short_description'],
             'description'       => ($description !== ''
-                ? '<p>'.nl2br(htmlspecialchars($description, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')).'</p>'
+                ? $descriptionHtml
                 : $original['description']).implode('', $images),
         ];
+    }
+
+    protected function sanitizeDescriptionPolicy(string $value): string
+    {
+        $segments = preg_split('/(<[^>]+>)/u', $value, -1, PREG_SPLIT_DELIM_CAPTURE) ?: [$value];
+
+        foreach ($segments as $index => $segment) {
+            if (str_starts_with($segment, '<')) {
+                continue;
+            }
+
+            $clauses = preg_split('/(?<=[，,。！？.!?；;\n])/u', $segment, -1, PREG_SPLIT_NO_EMPTY) ?: [$segment];
+            $segments[$index] = collect($clauses)
+                ->reject(fn (string $clause): bool => $this->descriptionPolicyViolations(['text' => $clause]) !== [])
+                ->implode('');
+        }
+
+        return trim(implode('', $segments));
     }
 
     protected function neutralize(string $value): string
@@ -444,8 +634,8 @@ class ProductContentPolicyService
             }
 
             $replacement = preg_match('/[\x{4e00}-\x{9fff}]/u', $segment)
-                ? '线上销售渠道'
-                : 'online marketplace';
+                ? '商品'
+                : 'product';
 
             foreach ($this->forbiddenWords() as $word) {
                 $segment = preg_replace($this->pattern($word), $replacement, $segment) ?? $segment;

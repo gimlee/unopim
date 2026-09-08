@@ -76,14 +76,15 @@ class ProductController extends Controller
     const VARIANT_CHILDREN_MAX_MATCHED_OPTIONS = 500;
 
     /**
-     * Classification diagnostics remain persisted for rules, imports and APIs,
-     * but the dedicated "商品类目归属" panel is their only editor surface.
+     * Values intentionally kept out of the generic editor. Classification
+     * diagnostics use "商品类目归属"; SEO metadata stays API-accessible.
      */
-    private const PRODUCT_EDITOR_HIDDEN_CLASSIFICATION_ATTRIBUTES = [
+    private const PRODUCT_EDITOR_HIDDEN_ATTRIBUTES = [
         'category_classification_status',
         'category_classification_method',
         'category_classification_confidence',
         'category_classification_evidence',
+        'meta_description',
     ];
 
     /**
@@ -802,6 +803,7 @@ class ProductController extends Controller
             : null;
 
         $contentPolicyRevisions = collect();
+        $listingExceptions = collect();
 
         if (Schema::hasTable('product_content_revisions')) {
             $contentPolicyProductId = $product->parent_id ?: $product->id;
@@ -822,6 +824,24 @@ class ProductController extends Controller
                         : (json_decode($revision->optimized_content ?: '{}', true) ?: []);
 
                     return $revision;
+                });
+        }
+
+        if (Schema::hasTable('product_listing_exceptions')) {
+            $listingExceptionProductId = $product->parent_id ?: $product->id;
+            $listingExceptions = DB::table('product_listing_exceptions')
+                ->where('product_id', $listingExceptionProductId)
+                ->orderByRaw('resolved_at IS NULL DESC')
+                ->latest('occurred_at')
+                ->latest('id')
+                ->limit(100)
+                ->get()
+                ->map(function ($exception): object {
+                    $exception->details = is_array($exception->details)
+                        ? $exception->details
+                        : (json_decode($exception->details ?: '{}', true) ?: []);
+
+                    return $exception;
                 });
         }
 
@@ -860,6 +880,7 @@ class ProductController extends Controller
             'productEditorHiddenAttributeCodes',
             'configurablePriceSummary',
             'contentPolicyRevisions',
+            'listingExceptions',
             'lazyGroups',
             'renderGroups',
             'groupAttributes',
@@ -943,7 +964,7 @@ class ProductController extends Controller
     private function productEditorHiddenAttributeCodes(Product $product, ?array $variantFieldLocks): array
     {
         $hidden = array_merge(
-            self::PRODUCT_EDITOR_HIDDEN_CLASSIFICATION_ATTRIBUTES,
+            self::PRODUCT_EDITOR_HIDDEN_ATTRIBUTES,
             $variantFieldLocks['hidden'] ?? []
         );
 

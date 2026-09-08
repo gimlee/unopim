@@ -182,6 +182,11 @@
                         'revisions' => $contentPolicyRevisions ?? collect(),
                     ])
 
+                    @include('admin::catalog.products.edit.listing-exceptions', [
+                        'exceptions' => $listingExceptions ?? collect(),
+                        'productId'  => $product->parent_id ?: $product->id,
+                    ])
+
                     @if ($variantTree ?? null)
                         {!! view_render_event('unopim.admin.catalog.product.edit.form.types.' . $product->type . '.before', ['product' => $product]) !!}
 

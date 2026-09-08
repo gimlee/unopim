@@ -61,8 +61,8 @@ it('rewrites matched product copy and preserves an immutable before-after revisi
         ->andReturnSelf();
     $ai->shouldReceive('ask')->once()->andReturn(json_encode([
         'name'              => '通用商品',
-        'short_description' => '适用于多种线上销售场景',
-        'description'       => '适用于多种线上销售场景，商品参数与原文一致。',
+        'short_description' => '结构简洁，便于日常使用。',
+        'description'       => '结构简洁，便于日常使用。\n核心参数与原文一致。',
     ], JSON_UNESCAPED_UNICODE));
     app()->instance('magic_ai', $ai);
 
@@ -73,8 +73,8 @@ it('rewrites matched product copy and preserves an immutable before-after revisi
     expect($result['changed'])->toBeTrue()
         ->and($result['matched_terms'])->toContain('Amazon', 'Lazada', '亚马逊')
         ->and($result['provider'])->toBe($platform->label)
-        ->and($stored['short_description'])->toBe('适用于多种线上销售场景')
-        ->and($stored['description'])->toContain('商品参数与原文一致', '<img src="/storage/detail.jpg">')
+        ->and($stored['short_description'])->toBe('结构简洁，便于日常使用。')
+        ->and($stored['description'])->toContain('核心参数与原文一致', '<img src="/storage/detail.jpg">')
         ->and($stored['description'])->not->toContain('Amazon', 'Lazada', '亚马逊')
         ->and($revision)->not->toBeNull()
         ->and(json_decode($revision->original_content, true)['description'])->toContain('Amazon')
@@ -132,7 +132,8 @@ it('falls back transparently when AI is unavailable and still removes exact mana
     expect($result['changed'])->toBeTrue()
         ->and($result['method'])->toBe('ai_fallback')
         ->and($result['ai_error'])->toContain('provider offline')
-        ->and($stored['description'])->toContain('线上销售渠道', '铝合金材质')
+        ->and($stored['short_description'])->toBe('铝合金材质。')
+        ->and($stored['description'])->toContain('铝合金材质')
         ->and($stored['description'])->not->toContain('Amazon', 'Lazada');
     $this->assertDatabaseHas('product_content_revisions', [
         'product_id' => $product->id,
@@ -167,7 +168,7 @@ it('optimizes only short description with a managed template and stores the prev
     $ai->shouldReceive('setPlatformId', 'setModel', 'setTemperature', 'setMaxTokens', 'setSystemPrompt', 'setPrompt')
         ->andReturnSelf();
     $ai->shouldReceive('ask')->once()->andReturn(json_encode([
-        'short_description' => '采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备。',
+        'short_description' => "采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备\n折叠后便于收纳",
     ], JSON_UNESCAPED_UNICODE));
     app()->instance('magic_ai', $ai);
 
@@ -182,9 +183,89 @@ it('optimizes only short description with a managed template and stores the prev
 
     expect($result['method'])->toBe('ai_description')
         ->and($result['provider'])->toBe($platform->label)
-        ->and($stored['short_description'])->toBe('采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备。')
+        ->and($stored['short_description'])->toBe('<p>采用铝合金可折叠结构，可调节角度并稳固支撑兼容设备。</p><p>折叠后便于收纳。</p>')
         ->and($stored['description'])->toBe('<p>铝合金结构，可折叠调节角度。</p>')
         ->and(json_decode($revision->original_content, true)['short_description'])->toContain('产自深圳')
         ->and($revision->template_id)->toBe($template->id)
-        ->and($revision->prompt_snapshot)->toContain('只描述商品本身');
+        ->and($revision->prompt_snapshot)->toContain('只描述商品本身')
+        ->and($stored['short_description'])->not->toContain('Amazon', '深圳', '价格');
+});
+
+it('retries an unsafe description and never saves prices regions or platforms', function () {
+    MagicAIPlatform::query()->update(['is_default' => false]);
+    MagicAIPlatform::create([
+        'label'      => 'Description policy retry AI',
+        'provider'   => AiProvider::Zhipu->value,
+        'api_url'    => AiProvider::Zhipu->defaultUrl(),
+        'api_key'    => 'test-key',
+        'models'     => 'glm-5.3-flash',
+        'is_default' => true,
+        'status'     => true,
+    ]);
+    $template = MagicAISystemPrompt::query()->where('purpose', 'product_description')->firstOrFail();
+    $product = Product::factory()->configurable()->create([
+        'sku'    => 'DESCRIPTION-RETRY-'.uniqid(),
+        'values' => ['channel_locale_specific' => ['default' => ['zh_CN' => [
+            'name'              => '桌面支架',
+            'short_description' => '原始短描述。',
+            'description'       => '<p>金属结构。</p>',
+        ]]]],
+    ]);
+    $ai = Mockery::mock();
+    $ai->shouldReceive('setPlatformId', 'setModel', 'setTemperature', 'setMaxTokens', 'setSystemPrompt', 'setPrompt')
+        ->andReturnSelf();
+    $ai->shouldReceive('ask')->once()->andReturn('{"short_description":"马来西亚 Amazon 售价 RM 19.90"}');
+    $ai->shouldReceive('ask')->once()->andReturn('{"short_description":"金属结构提供稳定支撑。\\n\\n折叠设计便于日常收纳。"}');
+    app()->instance('magic_ai', $ai);
+
+    $result = app(ProductContentPolicyService::class)->optimizeShortDescription(
+        $product,
+        'zh_CN',
+        'default',
+        $template->id,
+    );
+    $stored = data_get($product->fresh()->values, 'channel_locale_specific.default.zh_CN.short_description');
+
+    expect($result['short_description'])->toBe('<p>金属结构提供稳定支撑。</p><p>折叠设计便于日常收纳。</p>')
+        ->and($stored)->toBe('<p>金属结构提供稳定支撑。</p><p>折叠设计便于日常收纳。</p>')
+        ->and($stored)->not->toContain('马来西亚', 'Amazon', 'RM', '19.90');
+});
+
+it('retries English short descriptions when the target locale is Chinese', function () {
+    MagicAIPlatform::query()->update(['is_default' => false]);
+    MagicAIPlatform::create([
+        'label'      => 'Chinese description test AI',
+        'provider'   => AiProvider::Zhipu->value,
+        'api_url'    => AiProvider::Zhipu->defaultUrl(),
+        'api_key'    => 'test-key',
+        'models'     => 'glm-5.3-flash',
+        'is_default' => true,
+        'status'     => true,
+    ]);
+    $template = MagicAISystemPrompt::query()->where('purpose', 'product_description')->firstOrFail();
+    $product = Product::factory()->configurable()->create([
+        'sku'    => 'DESCRIPTION-CHINESE-'.uniqid(),
+        'values' => ['channel_locale_specific' => ['default' => ['zh_CN' => [
+            'name'              => '桌面支架',
+            'short_description' => '原始短描述。',
+            'description'       => '<p>金属结构。</p>',
+        ]]]],
+    ]);
+    $ai = Mockery::mock();
+    $ai->shouldReceive('setPlatformId', 'setModel', 'setTemperature', 'setMaxTokens', 'setSystemPrompt', 'setPrompt')
+        ->andReturnSelf();
+    $ai->shouldReceive('ask')->once()->andReturn('{"short_description":"Stable metal support.\\n\\nFoldable for storage."}');
+    $ai->shouldReceive('ask')->once()->andReturn('{"short_description":"金属结构提供稳定支撑。\\n\\n折叠设计便于日常收纳。"}');
+    app()->instance('magic_ai', $ai);
+
+    $result = app(ProductContentPolicyService::class)->optimizeShortDescription(
+        $product,
+        'zh_CN',
+        'default',
+        $template->id,
+    );
+
+    expect($result['short_description'])
+        ->toBe('<p>金属结构提供稳定支撑。</p><p>折叠设计便于日常收纳。</p>')
+        ->not->toContain('Stable', 'Foldable');
 });

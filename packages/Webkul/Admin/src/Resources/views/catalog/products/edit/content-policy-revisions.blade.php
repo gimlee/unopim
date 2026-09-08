@@ -22,13 +22,13 @@
                     暂无商品描述优化记录
                 </div>
 
-                <div v-else class="space-y-3">
+                <div v-else class="space-y-2">
                     <article
                         v-for="(revision, index) in revisions"
                         :key="revision.id"
-                        class="rounded border border-gray-200 bg-white p-3 dark:border-cherry-700 dark:bg-cherry-900"
+                        class="rounded border border-gray-200 bg-white p-2.5 dark:border-cherry-700 dark:bg-cherry-900"
                     >
-                        <header class="mb-2 flex flex-wrap items-start justify-between gap-2 border-b pb-2 dark:border-cherry-700">
+                        <header class="mb-2 flex flex-wrap items-start justify-between gap-2 dark:border-cherry-700">
                             <div class="min-w-0">
                                 <div class="flex flex-wrap items-center gap-2">
                                     <span class="rounded bg-primary-50 px-2 py-1 text-sm font-semibold text-primary-700 dark:bg-cherry-800 dark:text-primary-300" v-text="methodLabel(revision.method)"></span>
@@ -45,22 +45,32 @@
                             </div>
                         </header>
 
-                        <div class="grid gap-2 lg:grid-cols-2">
-                            <section class="rounded bg-red-50/60 p-3 dark:bg-red-950/20">
+                        <div class="grid gap-1.5 lg:grid-cols-2">
+                            <section class="rounded bg-red-50/60 p-2.5 dark:bg-red-950/20">
                                 <h4 class="mb-1 text-base font-semibold text-red-700 dark:text-red-300">优化前（已保存）</h4>
-                                <p class="text-sm font-semibold text-gray-800 dark:text-white" v-text="revision.original_content?.name || '—'"></p>
-                                <p class="mt-1 whitespace-pre-wrap break-words text-base leading-6 text-gray-700 dark:text-gray-200" v-text="plain(revision.original_content?.short_description) || '—'"></p>
-                                <p v-if="plain(revision.original_content?.description)" class="mt-2 whitespace-pre-wrap break-words border-t pt-2 text-sm leading-6 text-gray-600 dark:border-cherry-700 dark:text-gray-300" v-text="plain(revision.original_content.description)"></p>
+                                <div
+                                    v-for="(field, fieldIndex) in changedFields(revision)"
+                                    :key="`before-${field.key}`"
+                                    :class="fieldIndex ? 'mt-2 border-t pt-2 dark:border-cherry-700' : ''"
+                                >
+                                    <p class="mb-0.5 text-xs font-semibold text-gray-500" v-text="field.label"></p>
+                                    <p class="whitespace-pre-line break-words text-base leading-6 text-gray-700 dark:text-gray-200" v-text="plain(revision.original_content?.[field.key]) || '—'"></p>
+                                </div>
                             </section>
 
-                            <section class="rounded bg-green-50/60 p-3 dark:bg-green-950/20">
+                            <section class="rounded bg-green-50/60 p-2.5 dark:bg-green-950/20">
                                 <div class="mb-1 flex items-center gap-2">
                                     <h4 class="text-base font-semibold text-green-700 dark:text-green-300">优化后（该次结果）</h4>
                                     <span v-if="index === 0" class="rounded bg-green-100 px-1.5 py-0.5 text-xs text-green-700">最新记录</span>
                                 </div>
-                                <p class="text-sm font-semibold text-gray-800 dark:text-white" v-text="revision.optimized_content?.name || '—'"></p>
-                                <p class="mt-1 whitespace-pre-wrap break-words text-base leading-6 text-gray-700 dark:text-gray-200" v-text="plain(revision.optimized_content?.short_description) || '—'"></p>
-                                <p v-if="plain(revision.optimized_content?.description)" class="mt-2 whitespace-pre-wrap break-words border-t pt-2 text-sm leading-6 text-gray-600 dark:border-cherry-700 dark:text-gray-300" v-text="plain(revision.optimized_content.description)"></p>
+                                <div
+                                    v-for="(field, fieldIndex) in changedFields(revision)"
+                                    :key="`after-${field.key}`"
+                                    :class="fieldIndex ? 'mt-2 border-t pt-2 dark:border-cherry-700' : ''"
+                                >
+                                    <p class="mb-0.5 text-xs font-semibold text-gray-500" v-text="field.label"></p>
+                                    <p class="whitespace-pre-line break-words text-base leading-6 text-gray-700 dark:text-gray-200" v-text="plain(revision.optimized_content?.[field.key]) || '—'"></p>
+                                </div>
                             </section>
                         </div>
                     </article>
@@ -98,7 +108,28 @@
                     if (! value) return '';
                     const container = document.createElement('div');
                     container.innerHTML = value;
-                    return container.textContent || container.innerText || '';
+                    container.querySelectorAll('br').forEach(node => node.replaceWith('\n'));
+
+                    return (container.textContent || container.innerText || '')
+                        .replace(/\r/g, '')
+                        .replace(/[ \t]+\n/g, '\n')
+                        .replace(/\n[ \t]+/g, '\n')
+                        .replace(/\n{3,}/g, '\n\n')
+                        .trim();
+                },
+
+                changedFields(revision) {
+                    const definitions = [
+                        { key: 'name', label: 'Name' },
+                        { key: 'short_description', label: 'Short Description' },
+                        { key: 'description', label: 'Description' },
+                    ];
+                    const changed = definitions.filter(field => (
+                        this.plain(revision.original_content?.[field.key])
+                        !== this.plain(revision.optimized_content?.[field.key])
+                    ));
+
+                    return changed.length ? changed : [definitions[1]];
                 },
 
                 prependRevision(result) {

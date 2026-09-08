@@ -64,7 +64,7 @@
                     <div class="flex w-full items-center justify-between gap-3">
                         <p class="truncate text-sm text-gray-500" v-text="selected ? `本次使用：${selected.title}` : '请先选择模板'"></p>
                         <button type="button" class="primary-button" :disabled="optimizing || ! selected" @click="optimize">
-                            <span v-text="optimizing ? 'AI 优化中…' : '使用此模板 AI 优化'"></span>
+                            <span v-text="optimizing ? 'AI 商品描述生成中…' : '使用此模板生成 AI 商品描述'"></span>
                         </button>
                     </div>
                 </x-slot:footer>
@@ -192,7 +192,7 @@
                     }).catch(error => {
                         this.$emitter.emit('add-flash', {
                             type: 'error',
-                            message: error.response?.data?.message || '商品描述 AI 优化失败。',
+                            message: error.response?.data?.message || 'AI 商品描述生成失败。',
                         });
                     }).finally(() => this.optimizing = false);
                 },

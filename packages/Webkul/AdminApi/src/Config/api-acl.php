@@ -121,6 +121,11 @@ return [
         'name'  => 'AI 优化商品描述',
         'route' => 'admin.api.content_policy.optimize',
         'sort'  => 2,
+    ], [
+        'key'   => 'api.catalog.products.edit',
+        'name'  => '记录商品上架异常',
+        'route' => 'admin.api.listing_exceptions.store',
+        'sort'  => 2,
     ],
 
     // Products — PATCH maps to edit permission

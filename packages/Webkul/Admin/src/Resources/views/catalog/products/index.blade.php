@@ -93,7 +93,7 @@
                                     >
                                         <span :class="loading[record.product_id] ? 'icon-loader animate-spin' : (expanded[record.product_id] ? 'icon-chevron-up' : 'icon-chevron-down')"></span>
                                     </button>
-                                    <span class="truncate" :title="stripHtml(record[column.index])" v-text="record[column.index]"></span>
+                                    <span class="truncate text-xs font-medium tabular-nums tracking-tight" :title="stripHtml(record[column.index])" v-text="record[column.index]"></span>
                                     <button
                                         type="button"
                                         class="shrink-0 rounded p-1 text-lg text-gray-400 transition hover:bg-primary-100 hover:text-primary-600 dark:hover:bg-cherry-800"
@@ -120,11 +120,11 @@
                                 <p v-else class="truncate" :title="stripHtml(record[column.index])" v-text="record[column.index]"></p>
                             </div>
 
-                            <div class="flex items-center justify-end gap-2.5 select-none" @click.stop>
+                            <div class="flex items-center justify-end gap-0.5 select-none" @click.stop>
                                 <span
                                     v-for="(action, actionIndex) in record.actions"
                                     :key="actionIndex"
-                                    class="cursor-pointer rounded-md p-1.5 text-2xl transition-all hover:bg-primary-100 dark:hover:bg-gray-800"
+                                    class="cursor-pointer rounded p-1 text-base transition-all hover:bg-primary-100 dark:hover:bg-gray-800"
                                     :class="action.icon"
                                     :title="action.title || ''"
                                     v-text="action.icon ? '' : action.title"
@@ -216,7 +216,14 @@
                     },
 
                     gridTemplateColumns() {
-                        const tracks = this.visibleColumns.map(() => 'minmax(80px, 1fr)');
+                        const tracks = this.visibleColumns.map(column => {
+                            if (column.index === 'sku') return 'minmax(155px, 1.15fr)';
+                            if (column.type === 'image' || column.type === 'gallery') return '72px';
+                            if (column.index === 'name') return 'minmax(160px, 1.35fr)';
+                            if (column.index === 'created_at' || column.index === 'updated_at') return 'minmax(120px, 0.9fr)';
+
+                            return 'minmax(80px, 1fr)';
+                        });
 
                         if (this.massActions.length) {
                             tracks.unshift('36px');

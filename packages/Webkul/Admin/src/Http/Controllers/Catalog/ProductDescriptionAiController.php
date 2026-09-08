@@ -72,9 +72,9 @@ class ProductDescriptionAiController extends Controller
         } catch (Throwable $error) {
             report($error);
 
-            return response()->json(['message' => '商品描述 AI 优化失败：'.$error->getMessage()], 422);
+            return response()->json(['message' => 'AI 商品描述生成失败：'.$error->getMessage()], 422);
         }
 
-        return response()->json(['message' => 'Short Description 已完成 AI 优化并保存。', 'data' => $result]);
+        return response()->json(['message' => 'AI 商品描述已生成并保存为中文段落。', 'data' => $result]);
     }
 }
