@@ -64,6 +64,7 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
         'status',
         'type',
         'completeness',
+        'latest_listing_result',
     ];
 
     /**
@@ -139,6 +140,20 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                     ->where('primary_category_assignment.status', '=', 'confirmed');
             })
             ->leftJoin('categories as primary_category_record', 'primary_category_record.id', '=', 'primary_category_assignment.category_id')
+            ->leftJoin('product_listing_histories as latest_listing_history', function ($join) use ($tablePrefix) {
+                $join->on('latest_listing_history.product_id', '=', 'products.id')
+                    ->whereRaw("{$tablePrefix}latest_listing_history.id = (
+                        SELECT {$tablePrefix}listing_history_rank.id
+                        FROM {$tablePrefix}product_listing_histories AS {$tablePrefix}listing_history_rank
+                        WHERE {$tablePrefix}listing_history_rank.product_id = {$tablePrefix}products.id
+                        ORDER BY COALESCE(
+                            {$tablePrefix}listing_history_rank.completed_at,
+                            {$tablePrefix}listing_history_rank.started_at,
+                            {$tablePrefix}listing_history_rank.created_at
+                        ) DESC, {$tablePrefix}listing_history_rank.id DESC
+                        LIMIT 1
+                    )");
+            })
             ->select(
                 'products.sku',
                 'products.id as product_id',
@@ -160,6 +175,11 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                 'products.avg_completeness_score as completeness',
                 'primary_category_record.source_path as primary_category',
                 'primary_category_assignment.method as taxonomy_method',
+                'latest_listing_history.id as latest_listing_history_id',
+                'latest_listing_history.platform as latest_listing_platform',
+                'latest_listing_history.region as latest_listing_region',
+                'latest_listing_history.listing_type as latest_listing_type',
+                'latest_listing_history.status as latest_listing_status',
             );
 
         return $queryBuilder;
@@ -272,6 +292,43 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                     };
 
                     return '<span class="label-info">'.$label.'</span>';
+                },
+            ],
+
+            'latest_listing_result' => [
+                'index'      => 'latest_listing_result',
+                'label'      => '最新上架结果',
+                'type'       => 'string',
+                'searchable' => false,
+                'filterable' => false,
+                'sortable'   => false,
+                'closure'    => function ($row) {
+                    if (! $row->latest_listing_history_id) {
+                        return '<span class="label-info">暂无上架</span>';
+                    }
+
+                    $platform = strtoupper((string) ($row->latest_listing_platform ?: 'tiktok'));
+                    $region = strtoupper((string) ($row->latest_listing_region ?: '-'));
+                    $type = $row->latest_listing_type === 'review' ? '审核' : '草稿';
+                    $status = match ($row->latest_listing_status) {
+                        'saved'                  => '已保存',
+                        'draft_saved'            => '草稿已保存',
+                        'form_filled'            => '已完成填表',
+                        'submitted'              => '已提交',
+                        'submitted_for_review'   => '已提交审核',
+                        'submit_unconfirmed'     => '审核提交未确认',
+                        'success'                => '成功',
+                        'failed'                 => '失败',
+                        'cancelled'              => '已取消',
+                        'timeout'                => '超时',
+                        'draft_save_unconfirmed' => '草稿未确认',
+                        'pending'                => '等待执行',
+                        'starting'               => '正在启动',
+                        'filling'                => '正在填报',
+                        default                  => (string) ($row->latest_listing_status ?: '未知'),
+                    };
+
+                    return '<div class="leading-5"><span class="font-medium">'.e("{$platform} · {$region}").'</span><br><span class="text-xs text-gray-500">'.e("{$type} · {$status}").'</span></div>';
                 },
             ],
 

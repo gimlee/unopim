@@ -819,6 +819,7 @@ class ProductController extends Controller
 
         $contentPolicyRevisions = collect();
         $listingExceptions = collect();
+        $listingHistories = collect();
 
         if (Schema::hasTable('product_content_revisions')) {
             $contentPolicyProductId = $product->parent_id ?: $product->id;
@@ -860,6 +861,16 @@ class ProductController extends Controller
                 });
         }
 
+        if (Schema::hasTable('product_listing_histories')) {
+            $listingHistoryProductId = $product->parent_id ?: $product->id;
+            $listingHistories = DB::table('product_listing_histories')
+                ->where('product_id', $listingHistoryProductId)
+                ->orderByRaw('COALESCE(completed_at, started_at, created_at) DESC')
+                ->orderByDesc('id')
+                ->limit(100)
+                ->get();
+        }
+
         $family = $product->attribute_family;
 
         $lazyGroups = $family->attributeCount() > (int) config('product_editor.lazy_group_threshold');
@@ -896,6 +907,7 @@ class ProductController extends Controller
             'configurablePriceSummary',
             'contentPolicyRevisions',
             'listingExceptions',
+            'listingHistories',
             'lazyGroups',
             'renderGroups',
             'groupAttributes',

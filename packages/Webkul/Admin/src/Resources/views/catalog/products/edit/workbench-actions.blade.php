@@ -335,7 +335,7 @@
 
                     this.$emitter?.emit('open-confirm-modal', {
                         title: actionLabel,
-                        message: `确定对该商品在选定地区 [${regionsToRun.join(', ')}] 并发执行 TikTok Shop ${actionLabel} 吗？系统将为各地区同时启动独立的 Chrome 浏览器窗口并行填报（若遇验证码请在对应浏览器中完成）。`,
+                        message: `确定对该商品在选定地区 [${regionsToRun.join(', ')}] 并发执行 TikTok Shop ${actionLabel} 吗？系统将复用同一个 Chrome 登录会话，并在各地区的独立页面中并行填报（仅登录、验证码或安全验证需要人工处理）。`,
                         options: {
                             btnAgree: `并发${actionLabel}`,
                             btnDisagree: '取消',
@@ -349,7 +349,7 @@
                                 this.isListingDrafting = true;
                             }
                             this.activeListingRegions = [...regionsToRun];
-                            this.emitFlash('info', `正在并发启动 [${regionsToRun.join(', ')}] 的 Chrome 浏览器执行 ${actionLabel}，请留意弹出的独立窗口...`);
+                            this.emitFlash('info', `正在使用共享 Chrome 登录会话，为 [${regionsToRun.join(', ')}] 打开独立页面执行 ${actionLabel}...`);
 
                             try {
                                 const tasks = regionsToRun.map(region => this.executeSingleRegionListing(region, action, isSubmit));

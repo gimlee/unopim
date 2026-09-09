@@ -85,5 +85,9 @@ it('adds the property filters as a bounded set that never grows with the catalog
         'managedColumns' => ['product_id'],
     ]);
 
-    expect(gridColumns())->toHaveCount(count(app(ProductDataGrid::class)->getPropertyColumns()));
+    $materializedPropertyCount = collect(app(ProductDataGrid::class)->getPropertyColumns())
+        ->filter(fn (array $column, string $index): bool => $index === 'product_id' || ! empty($column['filterable']))
+        ->count();
+
+    expect(gridColumns())->toHaveCount($materializedPropertyCount);
 });

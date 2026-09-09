@@ -191,6 +191,11 @@
                         'productId'  => $product->parent_id ?: $product->id,
                     ])
 
+                    @include('admin::catalog.products.edit.listing-history', [
+                        'histories' => $listingHistories ?? collect(),
+                        'productId' => $product->parent_id ?: $product->id,
+                    ])
+
                     @if ($variantTree ?? null)
                         {!! view_render_event('unopim.admin.catalog.product.edit.form.types.' . $product->type . '.before', ['product' => $product]) !!}
 

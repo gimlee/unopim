@@ -16,6 +16,7 @@ use Webkul\Admin\Http\Controllers\Catalog\ProductDescriptionAiController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductNameAiController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductGridViewController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductListingExceptionController;
+use Webkul\Admin\Http\Controllers\Catalog\ProductListingHistoryController;
 use Webkul\Admin\Http\Middleware\EnsureChannelLocaleIsValid;
 
 /**
@@ -262,6 +263,10 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
         Route::controller(ProductListingExceptionController::class)->prefix('products/{productId}/listing-exceptions')->group(function () {
             Route::get('', 'index')->name('admin.catalog.products.listing_exceptions.index');
             Route::patch('{exceptionId}', 'update')->name('admin.catalog.products.listing_exceptions.update');
+        });
+
+        Route::controller(ProductListingHistoryController::class)->prefix('products/{productId}/listing-history')->group(function () {
+            Route::get('', 'index')->name('admin.catalog.products.listing_history.index');
         });
 
         Route::controller(ProductGridViewController::class)->prefix('products/grid-views')->group(function () {
