@@ -196,6 +196,12 @@
                         'productId' => $product->parent_id ?: $product->id,
                     ])
 
+                    @include('admin::catalog.products.edit.image-translation-viewer', [
+                        'productId' => $product->parent_id ?: $product->id,
+                        'sku'       => $product->sku,
+                    ])
+
+
                     @if ($variantTree ?? null)
                         {!! view_render_event('unopim.admin.catalog.product.edit.form.types.' . $product->type . '.before', ['product' => $product]) !!}
 
@@ -230,6 +236,12 @@
     </x-admin::form>
 
     {!! view_render_event('unopim.admin.catalog.product.edit.after', ['product' => $product]) !!}
+
+    @include('admin::catalog.products.edit.image-translation-modal', [
+        'productId' => $product->parent_id ?: $product->id,
+        'sku'       => $product->sku,
+    ])
+
 
     @pushOnce('scripts')
         <script>

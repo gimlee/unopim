@@ -389,6 +389,11 @@ class Product extends Model implements HistoryAuditable, PresentableHistoryInter
         ];
     }
 
+    public function imageTranslations()
+    {
+        return $this->hasMany(\Webkul\Product\Models\ProductImageTranslation::class, 'product_id');
+    }
+
     /**
      * The attributes that should be cast.
      */
@@ -400,3 +405,4 @@ class Product extends Model implements HistoryAuditable, PresentableHistoryInter
         ];
     }
 }
+

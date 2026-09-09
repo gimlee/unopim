@@ -29,7 +29,18 @@
 
                     <button
                         type="button"
+                        class="secondary-button inline-flex items-center gap-1.5 bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100 dark:bg-purple-900/30 dark:text-purple-300 dark:border-purple-800"
+                        :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
+                        @click="openImageTranslationModal"
+                    >
+                        <span class="icon-camera text-lg"></span>
+                        <span>图片翻译</span>
+                    </button>
+
+                    <button
+                        type="button"
                         class="secondary-button inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100 dark:bg-blue-900/30 dark:text-blue-300 dark:border-blue-800"
+
                         :disabled="isAiOptimizing || isListingDrafting || isListingSubmitting"
                         @click="handleListingDraft"
                     >
@@ -173,6 +184,12 @@
                     this.$emitter?.emit('add-flash', { type, message });
                     window.dispatchEvent(new CustomEvent('unopim:flash', { detail: { type, message } }));
                 },
+
+                openImageTranslationModal() {
+                    const emitter = this.$emitter || window.app?.config?.globalProperties?.$emitter;
+                    emitter?.emit('open-image-translation-modal');
+                },
+
 
                 hasUnsavedChanges() {
                     if (this.isFormDirty) {

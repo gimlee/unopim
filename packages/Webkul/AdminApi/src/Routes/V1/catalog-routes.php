@@ -10,8 +10,10 @@ use Webkul\AdminApi\Http\Controllers\API\Catalog\CategoryFieldController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ConfigurableProductController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ContentPolicyController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\MediaFileController;
+use Webkul\AdminApi\Http\Controllers\API\Catalog\ProductImageTranslationApiController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ProductListingExceptionController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\ProductListingHistoryController;
+
 use Webkul\AdminApi\Http\Controllers\API\Catalog\SimpleProductController;
 use Webkul\AdminApi\Http\Controllers\API\Catalog\VariantStructureController;
 use Webkul\AdminApi\Http\Controllers\API\MagicAI\MagicAISystemPromptSyncController;
@@ -148,6 +150,11 @@ Route::group([
     Route::controller(ProductListingHistoryController::class)->prefix('listing-history')->group(function () {
         Route::post('products/{sku}', 'store')->name('admin.api.listing_history.store');
     });
+
+    Route::controller(ProductImageTranslationApiController::class)->prefix('products/{sku}/image-translations')->group(function () {
+        Route::get('', 'index')->name('admin.api.image_translations.index');
+    });
+
 
     /** Products API Routes */
     Route::controller(SimpleProductController::class)->prefix('products')->group(function () {

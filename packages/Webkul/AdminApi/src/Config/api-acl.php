@@ -137,6 +137,12 @@ return [
         'route' => 'admin.api.listing_history.store',
         'sort'  => 2,
     ], [
+        'key'   => 'api.catalog.products',
+        'name'  => '获取商品翻译图片',
+        'route' => 'admin.api.image_translations.index',
+        'sort'  => 2,
+    ], [
+
         'key'   => 'api.settings',
         'name'  => 'AI 系统提示词列表',
         'route' => 'admin.api.magic_ai.system_prompts.index',

@@ -15,9 +15,11 @@ use Webkul\Admin\Http\Controllers\Catalog\ProductController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductDescriptionAiController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductNameAiController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductGridViewController;
+use Webkul\Admin\Http\Controllers\Catalog\ProductImageTranslationController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductListingExceptionController;
 use Webkul\Admin\Http\Controllers\Catalog\ProductListingHistoryController;
 use Webkul\Admin\Http\Middleware\EnsureChannelLocaleIsValid;
+
 
 /**
  * Catalog routes.
@@ -268,6 +270,14 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
         Route::controller(ProductListingHistoryController::class)->prefix('products/{productId}/listing-history')->group(function () {
             Route::get('', 'index')->name('admin.catalog.products.listing_history.index');
         });
+
+        Route::controller(ProductImageTranslationController::class)->prefix('products/{id}/image-translations')->group(function () {
+            Route::get('', 'index')->name('admin.catalog.products.image_translations.index');
+            Route::post('translate', 'translate')->name('admin.catalog.products.image_translations.translate');
+            Route::post('save', 'save')->name('admin.catalog.products.image_translations.save');
+            Route::delete('{translationId}', 'destroy')->name('admin.catalog.products.image_translations.destroy');
+        });
+
 
         Route::controller(ProductGridViewController::class)->prefix('products/grid-views')->group(function () {
             Route::get('', 'index')->name('admin.catalog.products.grid_views.index');
