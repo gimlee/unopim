@@ -72,6 +72,23 @@ return [
     ],
 
     /**
+     * Sourcing / Collection (采集)
+     */
+    [
+        'key'        => 'collection',
+        'name'       => '采集',
+        'route'      => 'admin.collection.1688.index',
+        'sort'       => 4,
+        'icon'       => 'icon-import',
+    ], [
+        'key'        => 'collection.1688',
+        'name'       => '1688',
+        'route'      => 'admin.collection.1688.index',
+        'sort'       => 1,
+        'icon'       => '',
+    ],
+
+    /**
      * Data Transfer.
      */
     [

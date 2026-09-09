@@ -486,6 +486,38 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Collection (采集)
+    |--------------------------------------------------------------------------
+    */
+    [
+        'key'   => 'collection',
+        'name'  => '采集',
+        'route' => 'admin.collection.1688.index',
+        'sort'  => 4,
+    ], [
+        'key'   => 'collection.1688',
+        'name'  => '1688',
+        'route' => 'admin.collection.1688.index',
+        'sort'  => 1,
+    ], [
+        'key'   => 'collection.1688.create',
+        'name'  => '新建采集',
+        'route' => 'admin.collection.1688.store',
+        'sort'  => 1,
+    ], [
+        'key'   => 'collection.1688.edit',
+        'name'  => '修改链接与重试',
+        'route' => 'admin.collection.1688.update',
+        'sort'  => 2,
+    ], [
+        'key'   => 'collection.1688.delete',
+        'name'  => '删除采集任务',
+        'route' => 'admin.collection.1688.destroy',
+        'sort'  => 3,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Configuration
     |--------------------------------------------------------------------------
     |

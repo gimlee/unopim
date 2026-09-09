@@ -11,6 +11,11 @@ require 'auth-routes.php';
 require 'catalog-routes.php';
 
 /**
+ * Collection routes.
+ */
+require 'collection-routes.php';
+
+/**
  * Settings routes.
  */
 require 'settings-routes.php';
