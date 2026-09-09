@@ -104,13 +104,20 @@ Asynchronous workloads are divided across dedicated Redis/Database queues to pre
 
 ### 4.4 Multi-Platform AI & Dual Intelligence
 UnoPim integrates AI at two levels:
-1. **Magic AI (`Webkul\MagicAI`)**: Admin-configured LLM platforms with AES-256 encrypted API keys, dynamic model listing, and structured task agents for product description generation, image creation, and multi-locale attribute translation.
+1. **Magic AI (`Webkul\MagicAI`)**: Admin-configured LLM platforms with AES-256 encrypted API keys, dynamic model listing, and fine-grained system prompt templates isolated by business `purpose` (`general`, `category_classification`, `product_name`, `product_description`). Enforces a strict single-active template constraint per purpose, and powers AI title refinement (with supply-source decoupling and negative word filtering), HTML `<p>` structured description generation adhering to quality rules, and structured multi-locale translation.
 2. **AI Agent (`Webkul\AiAgent`)**: A chat copilot featuring a permission-gated `ToolRegistry` that can perform multi-step operations (catalog summaries, creating categories/products, bulk attribute updates) with strict permission checks and rollback boundaries.
 
 ### 4.5 Cross-Border E-Commerce & Platform Taxonomies
 - **Platform Category Mapping**: Bridges UnoPim standard categories with external e-commerce marketplaces (e.g., TikTok Shop MY category tree) and supplier platforms (e.g., 1688).
 - **Dual Classification Engine**: Classifies products using rule-based criteria (1688 source mappings, aliases, keyword rules) or AI classification (Magic AI with bounded deterministic candidate pre-filtering to prevent hallucinations).
-- **Multi-Currency System**: Automatically fetches exchange rates from the Frankfurter API every 3 hours with multi-tiered fallback and supports distinct real vs. commercial selling rates.
+- **Multi-Currency System**: Automatically fetches exchange rates from the Frankfurter API every 3 hours with two-level fallback (one-day historical average; `RuntimeException` on total failure) and supports distinct real vs. commercial selling rates in `exchange_rate_settings`.
+
+### 4.6 Cross-Border Catalog Workbench & Content Policy Compliance
+- **1688 Product Collection Workbench**: Dedicated asynchronous task center (`Collection1688Controller`) parsing 1688 offer URLs, dispatching jobs to local PIM collection microservice (`127.0.0.1:8020`), with state tracking, failure retries, source URL updates, and media asset deep-cleanup.
+- **Content Policy & Forbidden Words Engine**: Centralized prohibited words repository (`content_policy_forbidden_words`) and high-throughput regex scanner (`ProductContentPolicyService`), performing AI-driven contextual rewriting with offline fallback redaction, and journaling all changes in `product_content_revisions`.
+- **Multi-Region Listing Automation & Resilience**: Dispatches draft/submit listing jobs across multiple Southeast Asian regions (MY, TH, SG, PH, VN), supports real-time listing cancellation/stop, asynchronous status polling, and records execution records in `product_listing_histories` (with an interactive history drawer in product edit and badges on the product grid).
+- **Listing Exceptions Management**: Captures blocking and warning events during listing attempts in `product_listing_exceptions`, with manual resolution toggling and real-time polling.
+- **Product Image Multi-Language Translation**: Extracts text from product images, calls multi-language translation services to generate localized visuals in `product_image_translations`, and provides a side-by-side comparison panel and a double-click lossless zoom modal.
 
 ---
 

@@ -25,7 +25,7 @@
 - **则 (THEN)** 系统 SHALL 递增已处理记录计数，刷新 `job_track.heartbeat_at` 时间戳，并实时更新任务总百分比
 
 #### Scenario: 识别与清理超时停滞任务
-- **当 (WHEN)** 调度执行 `unopim:job:reap-stalled` 指令发现某个任务的心跳在阈值时间内未发生更新时
+- **当 (WHEN)** 调度执行 `unopim:data-transfer:reap-stalled` 指令发现某个任务的心跳在阈值时间内未发生更新时
 - **则 (THEN)** 系统 SHALL 将该任务状态置为失败或超时终止，并记入运行故障日志
 
 ### Requirement: 灵活的目录导出配置与快速网格导出

@@ -2,7 +2,7 @@
 
 ## Purpose
 
-汇率管理核心能力以人民币（CNY）为基准锚点，通过 Laravel 调度器每三小时自动从 Frankfurter API 抓取实时外汇牌价，具备多级历史容灾回退能力，支持运营人员维护商业销售汇率，并通过管理界面和 REST API 暴露交叉汇率换算矩阵。
+汇率管理核心能力以人民币（CNY）为基准锚点，通过 Laravel 调度器每三小时自动从 Frankfurter API 抓取实时外汇牌价，具备二级历史容灾回退能力（前一日均值降级，最终异常中止），支持运营人员维护商业销售汇率，并通过管理界面和 REST API 暴露交叉汇率换算矩阵。
 
 ## Requirements
 
@@ -13,16 +13,16 @@
 - **当 (WHEN)** 调度器或带有 `--force` 参数的 `unopim:exchange-rates:refresh` 执行且第三方 API 正常响应时
 - **则 (THEN)** 系统 SHALL 解析并计算 `1 CNY = N 目标币种` 的汇率比值，将结果存入 `exchange_rates` 表并打上 `fetched_at` 抓取时间戳
 
-#### Scenario: 接口故障时的三级容灾回退
+#### Scenario: 接口故障时的二级容灾回退
 - **当 (WHEN)** 当前外部 API 请求失败或返回数据不完整时
-- **则 (THEN)** 系统 SHALL 尝试拉取前一天的历史数据并计算日均值；若仍不可达，则回退至本地 31 天内存储的最近一条成功记录
+- **则 (THEN)** 系统 SHALL 尝试拉取前一天的历史数据并计算日均值；若仍不可达，系统 SHALL 抛出运行时异常（`RuntimeException`）并中止本次汇率刷新，保留本地最近一次成功记录不受影响
 
 ### Requirement: 双汇率机制（真实牌价 vs. 销售汇率）
 系统 SHALL 分离维护外部真实汇率与商业销售汇率，并在商品数据导入计价与多币种价格计算中以销售汇率为换算基准。
 
 #### Scenario: 运营调整销售结算汇率
 - **当 (WHEN)** 管理员在后台 `/admin/settings/exchange-rates` 页面手动调整某币种的销售汇率时
-- **则 (THEN)** 系统 SHALL 更新 `exchange_rate_selling` 并在后续的商品价格计算与导出中即时生效该销售汇率
+- **则 (THEN)** 系统 SHALL 更新 `exchange_rate_settings` 表中的对应 `selling_rate`，并在后续的商品价格计算与导出中即时生效该销售汇率
 
 #### Scenario: 商品导入时自动折算外币价格
 - **当 (WHEN)** 商品导入仅提供了基础 CNY 价格时

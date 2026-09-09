@@ -49,3 +49,8 @@
 #### Scenario: 确认并应用分类建议
 - **当 (WHEN)** 操作人员在审核界面点击“使用此结果”时
 - **则 (THEN)** 系统 SHALL 原子更新商品主属性中的 PIM 标准类目，并在 `product_platform_category_assignments` 中记录确认的商品级平台类目
+
+#### Scenario: AI 分类系统提示词专属绑定
+- **当 (WHEN)** 执行商品 AI 分类计算时
+- **则 (THEN)** 分类器 SHALL 严格绑定 `magic_ai_system_prompts` 中 `purpose = 'category_classification'` 且启用的专属提示词模板，杜绝通用营销文案或名称提炼提示词对分类判定的逻辑干扰
+

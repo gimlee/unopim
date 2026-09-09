@@ -23,14 +23,16 @@ flowchart TB
     end
 
     subgraph DomainPackages [核心业务领域包 / Domain Modules]
-        ProductMod[Webkul Product\nSimple/Configurable, Variants, EAV JSON]
+        ProductMod[Webkul Product\nSimple/Configurable, Variants, EAV JSON, Listing Workbench]
         AttrMod[Webkul Attribute\nDynamic Types, Scoping, Families, Groups]
         CatMod[Webkul Category\nNested Set, Platform Taxonomy, Dual AI/Rule Classifier]
         DataTransferMod[Webkul DataTransfer\nBatch Import/Export, Buffers, Heartbeat]
         CompletenessMod[Webkul Completeness\nChannel/Locale Scoring Engine]
         MeasurementMod[Webkul Measurement\nUnits of Measure & Conversions]
         PassportMod[Webkul ProductPassport & Publication\nDPP, JSON-LD, QR Carriers, Versions]
-        MagicAiMod[Webkul MagicAI & AiAgent\nMulti-Platform LLM, Tool Registry]
+        MagicAiMod[Webkul MagicAI & AiAgent\nMulti-Platform LLM, Purpose Prompts, Tool Registry]
+        ContentPolicyMod[Webkul AdminApi & Admin\nForbidden Words Engine, Scanning, Revision Audit]
+        CollectionMod[Webkul Admin Collection\n1688 Workbench, Async Jobs, Cleanup]
         ExchangeMod[App ExchangeRateService\nFrankfurter Sync, Real & Selling Rates]
     end
 
@@ -42,9 +44,10 @@ flowchart TB
     end
 
     subgraph PersistenceLayer [持久化与外部集成 / Data & External Services]
-        RDBMS[(RDBMS: MySQL 8 / PostgreSQL 16)]
+        RDBMS[(RDBMS: MySQL 8 / PostgreSQL 16\nproducts, revisions, exceptions, histories, translations)]
         ES[(Elasticsearch 8.17 Index)]
         RedisCache[(Redis Cache & Session)]
+        PimService[PIM Microservice 127.0.0.1:8020\n1688 Crawler & TikTok Shop Automation]
         ExtPlatforms[External APIs\nTikTok Shop, 1688, Frankfurter, LLM Providers]
     end
 
@@ -58,6 +61,7 @@ flowchart TB
     DomainPackages --> RDBMS
     DomainPackages --> ES
     DomainPackages --> RedisCache
+    DomainPackages --> PimService
     DomainPackages --> ExtPlatforms
 ```
 
@@ -186,18 +190,18 @@ flowchart LR
        ▼
 [RefreshExchangeRates Command]
        │
-   [ExchangeRateService] ──(异常时三级降级)──► [本地 1 日均值 / 前日缓存 / 31 天历史]
+   [ExchangeRateService]
        │
        ├─► 实时汇率库 (Real Rates) ─────► GET /api/v1/rest/exchange-rates
        └─► 商业销售汇率 (Selling Rates) ──► 导入计价换算 (CNY → USD, MYR, THB)
 ```
 
 - **基准货币与目标币种**: 以人民币 (`CNY`) 为基准锚点，支持 `USD`、`MYR`、`THB` 等目标结算币种。
-- **实时汇率抓取与三级容灾**:
+- **实时汇率抓取与二级容灾**:
   - 每 3 小时由调度器触发抓取。
   - 第一级：实时拉取最新外汇数据。
   - 第二级：若最新数据缺失，抓取前一日数据并计算均值。
-  - 第三级：若接口不可达，自动回退到本地最近成功持久化的记录。
+  - 若前一日数据仍不可达，系统抛出 `RuntimeException` 中止本次刷新，保留本地最近成功记录不受影响。
 - **双汇率机制**:
   - `Real Rate`: 真实的国际外汇牌价。
   - `Selling Rate`: 运营人员可在后台单独微调的销售结算加价汇率；商品导入时根据销售汇率自动换算各币种价格。
@@ -289,3 +293,45 @@ sequenceDiagram
 ### 10.3 事件驱动 Webhooks
 - 基于观察者模式监听商品与目录生命周期事件。
 - 所有对外 HTTP 推送均通过 `webhooks` 队列异步执行，并提供完备的重试机制与调用日志记录 (`webhook_logs`)。
+
+---
+
+## 11. 跨境电商工作台与内容风控合规体系 (Cross-Border Workbench & Compliance Engine)
+
+### 11.1 1688 商品采集工作台架构
+- **任务调度与代理**:
+  - `Collection1688Controller` 提供独立的前端工作台与管理面板，接收包含 Offer ID 的 1688 商品详情链接。
+  - 通过 HTTP 异步向本地驻留的 PIM 采集微服务 (`127.0.0.1:8020/api/jobs/async-import`) 分发抓取流水线，默认注入 `MY` 目标地区及 `zh_CN` 语言。
+- **任务生命周期与深度清理**:
+  - 支持任务轮询、失败单键重试及源链接热修改。
+  - 删除任务时支持级联调用下游端点彻底清理本地临时 HTML 网页与已下载的媒体资产。
+
+### 11.2 商品内容合规与修订审计引擎
+```mermaid
+flowchart LR
+    Content[原始商品文本\n标题 / 简述 / 描述] --> Scanner[正则合规扫描引擎\nProductContentPolicyService]
+    Scanner -->|匹配违禁词库| Decision{是否包含违禁词?}
+    Decision -->|否| Pass[直接放行，保持原始内容]
+    Decision -->|是| Rewriter[AI 语义重写或脱敏降级]
+    Rewriter --> UpdateProduct[更新商品属性\n更新 values 对应 Locale]
+    UpdateProduct --> Audit[版本审计落库\nproduct_content_revisions]
+```
+- **违禁词库管理 (`content_policy_forbidden_words`)**: 支持后台维护与外部系统 REST 批量同步，数据层强制小写归一化去重。
+- **高吞吐扫描与容灾降级**: 预处理剥离 HTML 标签后执行正则匹配；优先调度 Magic AI 重写中和敏感词；AI 离线或超时自动降级为精准星号/中性词脱敏（标记为 `ai_fallback`），保证业务上架主链路不阻塞。
+- **修订审计 (`product_content_revisions`)**: 商品属性持久化后顺序写入审计快照，完整记录优化前后对比、操作地区、语言及所用模型，在编辑页提供差异高亮视图。
+
+### 11.3 TikTok Shop 多地区上架自动化与状态机
+- **自动化并发调度**:
+  - 支持面向东南亚多地区（MY、TH、SG、PH、VN 等）发起草稿上架或直接提交审核，调度外部无头浏览器自动化流水线。
+  - 提供实时取消 (`/listing/cancel`) 端点，可在上架卡顿或发现错误时紧急刹车。
+- **上架履历与状态展示 (`product_listing_histories`)**:
+  - 持久化每次上架尝试的 Attempt ID、地区、状态、发布链接及执行耗时。
+  - 商品编辑页提供全景“上架历史”抽屉，主商品表格列实时以状态徽标展示最新上架结果。
+- **上架异常生命周期治理 (`product_listing_exceptions`)**:
+  - 自动捕获上架中断的错误码与详情，区分阻塞性与警告级别；运营人员可在前端面板勾选“已解决”，实现异常闭环。
+
+### 11.4 商品图片多语言翻译子系统
+- **架构流转 (`product_image_translations`)**:
+  - 提取商品主图与画廊图中的文字，调用多语言翻译服务将其渲染为当地语言版本（如泰文、马来文、英文、印尼文、越南文）。
+  - 后台提供原图与译图并排联动对比面板，并支持双击查看器进行高分辨率无损放大。
+
