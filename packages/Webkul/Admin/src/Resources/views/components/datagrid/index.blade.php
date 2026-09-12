@@ -22,6 +22,22 @@
         <div :class="{'compact-datagrid': isCompact()}">
             <x-admin::datagrid.toolbar />
 
+            <div
+                v-if="loadError"
+                class="mt-4 flex items-center justify-between gap-4 rounded border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-800 dark:bg-red-950 dark:text-red-200"
+                role="alert"
+            >
+                <span v-text="loadError.message"></span>
+
+                <button
+                    type="button"
+                    class="rounded bg-red-600 px-3 py-1.5 font-medium text-white hover:bg-red-700"
+                    @click="retryLoad"
+                >
+                    重试
+                </button>
+            </div>
+
             <div class="flex mt-4">
                 <x-admin::datagrid.table :isMultiRow="$isMultiRow">
                     <template #header>
@@ -72,6 +88,14 @@
             data() {
                 return {
                     isLoading: false,
+
+                    loadError: null,
+
+                    requestGeneration: 0,
+
+                    requestController: null,
+
+                    requestTimeout: 15000,
 
                     isSelectingAllMatching: false,
 
@@ -196,6 +220,8 @@
             },
 
             beforeUnmount() {
+                this.requestController?.abort();
+
                 if (this._onShareLinkChanged) {
                     this.$emitter.off('share-link-changed', this._onShareLinkChanged);
                 }
@@ -380,15 +406,28 @@
                     params.managedColumns = this.available.meta?.managedColumn?.columns;
                     params.manageableColumn = this.available.meta?.managedColumn?.columns;
 
-                    this.isLoading = true;
+                    this.requestController?.abort();
 
-                    this.$refs['filterDrawer'].close();
+                    const requestGeneration = ++this.requestGeneration;
+                    const requestController = new AbortController();
+
+                    this.requestController = requestController;
+                    this.isLoading = true;
+                    this.loadError = null;
+
+                    this.$refs['filterDrawer']?.close();
 
                     this.$axios
                         .get(this.src, {
-                            params: { ...params, ...extraParams }
+                            params: { ...params, ...extraParams },
+                            signal: requestController.signal,
+                            timeout: this.requestTimeout,
                         })
                         .then((response) => {
+                            if (requestGeneration !== this.requestGeneration) {
+                                return;
+                            }
+
                             /**
                              * Precisely taking all the keys to the data prop to avoid adding any extra keys from the response.
                              */
@@ -409,10 +448,11 @@
                              * the datagrid JSON). Without a valid columns array the filter-initialisation below
                              * throws `Cannot read properties of undefined (reading 'filter')` and breaks the page.
                              */
-                            if (! Array.isArray(columns)) {
-                                this.isLoading = false;
+                            if (! Array.isArray(columns) || ! Array.isArray(records) || ! meta || typeof meta !== 'object') {
+                                const malformedError = new Error('数据列表返回了无法识别的响应，请重试。');
+                                malformedError.code = 'MALFORMED_DATAGRID_RESPONSE';
 
-                                return;
+                                throw malformedError;
                             }
 
                             this.available.id = id;
@@ -490,8 +530,36 @@
                                 applied: this.applied
                             });
 
+                        })
+                        .catch((error) => {
+                            if (requestGeneration !== this.requestGeneration || error?.code === 'ERR_CANCELED') {
+                                return;
+                            }
+
+                            const timedOut = error?.code === 'ECONNABORTED'
+                                || error?.code === 'ETIMEDOUT';
+
+                            this.loadError = {
+                                type: timedOut ? 'timeout' : (error?.code === 'MALFORMED_DATAGRID_RESPONSE' ? 'malformed' : 'request'),
+                                message: timedOut
+                                    ? '数据加载超时，当前结果已保留，请重试。'
+                                    : (error?.message === '数据列表返回了无法识别的响应，请重试。'
+                                        ? error.message
+                                        : '数据加载失败，当前结果已保留，请重试。'),
+                            };
+                        })
+                        .finally(() => {
+                            if (requestGeneration !== this.requestGeneration) {
+                                return;
+                            }
+
                             this.isLoading = false;
+                            this.requestController = null;
                         });
+                },
+
+                retryLoad() {
+                    this.get();
                 },
 
                 /**

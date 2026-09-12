@@ -4,10 +4,13 @@ namespace Webkul\Admin\Http\Controllers\Catalog;
 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Throwable;
 use Webkul\Admin\Http\Controllers\Controller;
+use Webkul\Admin\Jobs\TranslateProductImages;
 use Webkul\Product\Models\Product;
 use Webkul\Product\Models\ProductImageTranslation;
 use Webkul\Product\Repositories\ProductRepository;
@@ -67,6 +70,12 @@ class ProductImageTranslationController extends Controller
                 ];
             });
 
+        $activeJob = DB::table('product_image_translation_jobs')
+            ->where('product_id', $rootProduct->id)
+            ->whereIn('status', ['queued', 'running'])
+            ->latest('created_at')
+            ->first();
+
         return response()->json([
             'success'           => true,
             'product'           => [
@@ -76,6 +85,7 @@ class ProductImageTranslationController extends Controller
             'images'            => $images,
             'translations'      => $translations,
             'candidate_regions' => $this->candidateRegions,
+            'active_job'        => $activeJob ? $this->formatTranslationJob($activeJob) : null,
         ]);
     }
 
@@ -92,113 +102,93 @@ class ProductImageTranslationController extends Controller
             'platform'      => ['nullable', 'string', 'max:32'],
         ]);
 
-        set_time_limit(300);
-
         $product = $this->productRepository->findOrFail($id);
         $rootProduct = $product->parent ?: $product;
 
-        $targetLang = $request->input('target_lang', 'th');
-        $sourceLang = $request->input('source_lang', 'zh');
-        $region = strtoupper($request->input('region', 'TH'));
-        $platform = $request->input('platform', 'aeAi');
-        $selectedImages = $request->input('images');
+        $payload = [
+            'images'      => $request->input('images'),
+            'target_lang' => $request->input('target_lang', 'th'),
+            'source_lang' => $request->input('source_lang', 'zh'),
+            'region'      => strtoupper($request->input('region', 'TH')),
+            'platform'    => $request->input('platform', 'aeAi'),
+        ];
 
-        $pimUrl = $this->getPimUrl();
+        $jobState = DB::transaction(function () use ($rootProduct, $payload): array {
+            DB::table('products')->where('id', $rootProduct->id)->lockForUpdate()->value('id');
 
-        $results = [];
-        $errors = [];
+            $existingJob = DB::table('product_image_translation_jobs')
+                ->where('product_id', $rootProduct->id)
+                ->whereIn('status', ['queued', 'running'])
+                ->latest('created_at')
+                ->first();
 
-        foreach ($selectedImages as $item) {
-            $rawPath = $item['path'] ?? $item['original_url'] ?? '';
-            if (! $rawPath) {
-                continue;
+            if ($existingJob) {
+                return ['id' => $existingJob->id, 'status' => $existingJob->status, 'created' => false];
             }
 
-            try {
-                $translatedUrl = null;
-                $isRemote = str_starts_with($rawPath, 'http://') || str_starts_with($rawPath, 'https://');
+            $jobId = (string) Str::uuid();
 
-                if (! $isRemote) {
-                    $disk = Storage::disk('public');
-                    $fullLocalPath = $disk->path($rawPath);
+            DB::table('product_image_translation_jobs')->insert([
+                'id'         => $jobId,
+                'product_id' => $rootProduct->id,
+                'status'     => 'queued',
+                'payload'    => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
 
-                    if (file_exists($fullLocalPath)) {
-                        $uploadResponse = Http::timeout(120)
-                            ->attach('file', file_get_contents($fullLocalPath), basename($fullLocalPath))
-                            ->post("{$pimUrl}/api/image-translation/upload-and-translate", [
-                                'source_lang'        => $sourceLang,
-                                'target_lang'        => $targetLang,
-                                'translate_platform' => $platform,
-                            ]);
+            return ['id' => $jobId, 'status' => 'queued', 'created' => true];
+        });
 
-                        if ($uploadResponse->successful()) {
-                            $resData = $uploadResponse->json();
-                            $items = $resData['results'] ?? [];
-                            if (! empty($items)) {
-                                $translatedUrl = $items[0]['translated_url'] ?? null;
-                            } else {
-                                $translatedUrl = $resData['translated_url'] ?? null;
-                            }
-                        } else {
-                            $errMsg = $uploadResponse->json('detail') ?: ('PIM 翻译上传失败 HTTP ' . $uploadResponse->status());
-                            $errors[] = "图片 {$rawPath} 翻译失败: {$errMsg}";
-                        }
-                    } else {
-                        $errors[] = "本地图片文件不存在: {$rawPath}";
-                    }
-                } else {
-                    $transResponse = Http::timeout(120)
-                        ->post("{$pimUrl}/api/image-translation/translate", [
-                            'image_urls'         => [$rawPath],
-                            'source_lang'        => $sourceLang,
-                            'target_lang'        => $targetLang,
-                            'translate_platform' => $platform,
-                        ]);
-
-                    if ($transResponse->successful()) {
-                        $resData = $transResponse->json();
-                        $items = $resData['results'] ?? [];
-                        if (! empty($items)) {
-                            $translatedUrl = $items[0]['translated_url'] ?? null;
-                        }
-                    } else {
-                        $errMsg = $transResponse->json('detail') ?: ('PIM 翻译接口失败 HTTP ' . $transResponse->status());
-                        $errors[] = "图片 {$rawPath} 翻译失败: {$errMsg}";
-                    }
-                }
-
-                if ($translatedUrl) {
-                    $results[] = [
-                        'original_url'   => $rawPath,
-                        'original_view'  => $isRemote ? $rawPath : Storage::url($rawPath),
-                        'translated_url' => $translatedUrl,
-                        'image_type'     => $item['type'] ?? 'gallery',
-                        'variant_sku'    => $item['variant_sku'] ?? null,
-                        'region'         => $region,
-                        'locale'         => $targetLang,
-                        'status'         => 'success',
-                    ];
-                }
-            } catch (Throwable $e) {
-                report($e);
-                $errors[] = "处理图片 {$rawPath} 异常: " . $e->getMessage();
-            }
-        }
-
-        if (empty($results) && ! empty($errors)) {
+        if (! $jobState['created']) {
             return response()->json([
-                'success' => false,
-                'message' => implode('; ', array_slice($errors, 0, 3)),
-                'errors'  => $errors,
-            ], 422);
+                'success' => true,
+                'status'  => $jobState['status'],
+                'job_id'  => $jobState['id'],
+                'message' => '该商品已有图片翻译任务正在执行',
+            ], 202);
         }
+
+        TranslateProductImages::dispatch($jobState['id']);
 
         return response()->json([
             'success' => true,
-            'message' => '图片翻译成功，已生成 ' . count($results) . ' 张译图',
-            'results' => $results,
-            'errors'  => $errors,
+            'status'  => 'queued',
+            'job_id'  => $jobState['id'],
+            'message' => '图片翻译任务已进入队列',
+        ], 202);
+    }
+
+    /**
+     * Return persistent image-translation job status.
+     */
+    public function status(int $id, string $jobId): JsonResponse
+    {
+        $product = $this->productRepository->findOrFail($id);
+        $rootProduct = $product->parent ?: $product;
+        $job = DB::table('product_image_translation_jobs')
+            ->where('id', $jobId)
+            ->where('product_id', $rootProduct->id)
+            ->first();
+
+        abort_unless($job, 404);
+
+        return response()->json([
+            'success' => true,
+            'data'    => $this->formatTranslationJob($job),
         ]);
+    }
+
+    protected function formatTranslationJob(object $job): array
+    {
+        return [
+            'id'         => $job->id,
+            'status'     => $job->status,
+            'results'    => $job->results ? json_decode($job->results, true) : [],
+            'errors'     => $job->errors ? json_decode($job->errors, true) : [],
+            'error'      => $job->error,
+            'created_at' => $job->created_at,
+        ];
     }
 
     /**
@@ -233,7 +223,9 @@ class ProductImageTranslationController extends Controller
             // Download translated OSS image to local storage
             $localPath = null;
             try {
-                $imgResponse = Http::timeout(30)->get($translatedUrl);
+                $imgResponse = Http::connectTimeout(config('services.product_info_management.connect_timeout'))
+                    ->timeout(config('services.product_info_management.download_timeout'))
+                    ->get($translatedUrl);
                 if ($imgResponse->successful()) {
                     $ext = 'jpg';
                     $urlPath = parse_url($translatedUrl, PHP_URL_PATH);
@@ -398,17 +390,4 @@ class ProductImageTranslationController extends Controller
         return $images;
     }
 
-    /**
-     * Resolve PIM service base URL.
-     */
-    protected function getPimUrl(): string
-    {
-        return rtrim(
-            config('services.product_info_management.base_url')
-            ?: config('services.pim.url')
-            ?: env('PRODUCT_INFO_MANAGEMENT_BASE_URL')
-            ?: env('PIM_API_URL', 'http://127.0.0.1:8020'),
-            '/'
-        );
-    }
 }

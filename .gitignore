@@ -50,6 +50,8 @@ test-results
 !/docs/product-info-management-integration.md
 !/docs/product-description-ai.md
 !/docs/product-name-ai.md
+!/docs/performance/
+!/docs/performance/local-admin-runtime.md
 graphify-out
 .mcp.json
 boost.json

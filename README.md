@@ -250,6 +250,8 @@ docker compose -f compose.dev.yaml up -d
 
 First boot installs Composer dependencies into `./vendor`. The stack defaults to **Nginx + PHP-FPM** and **PostgreSQL 16**; for Apache use `-f compose.dev.yaml -f compose.dev.apache.yaml`, and for MySQL set `COMPOSE_PROFILES=mysql`, `DB_CONNECTION=mysql`, `DB_HOST=unopim-mysql`, `DB_PORT=3306` in `.env` before the first `up`.
 
+Local performance checks, schema readiness, the isolated image-translation worker, and rollback commands are documented in [docs/performance/local-admin-runtime.md](docs/performance/local-admin-runtime.md).
+
 > **Port conflicts?** If you already have MySQL, Redis, or Elasticsearch running locally, edit the `FORWARD_*` ports in `.env` and restart. See `.env.docker` for details.
 
 **Deploying?** Inject `APP_KEY` as a secret rather than letting the container generate one, and set `UNOPIM_SKIP_MIGRATIONS=true` where the schema is managed by the deployment itself — a Kubernetes Job or a release step — so scaled replicas do not race each other.

@@ -3,6 +3,7 @@
     sku="{{ $sku }}"
     get-url="{{ route('admin.catalog.products.image_translations.index', $productId) }}"
     translate-url="{{ route('admin.catalog.products.image_translations.translate', $productId) }}"
+    status-url-template="{{ route('admin.catalog.products.image_translations.status', [$productId, '__JOB__']) }}"
     save-url="{{ route('admin.catalog.products.image_translations.save', $productId) }}"
 ></v-product-image-translation-modal>
 
@@ -174,6 +175,7 @@
                                 <span class="text-xs text-gray-600 dark:text-gray-300">
                                     已勾选 <strong class="text-purple-700 dark:text-purple-400">@{{ selectedImages.length }}</strong> 张待翻译图片
                                 </span>
+                                <span v-if="translationJob" class="text-xs font-medium text-purple-700 dark:text-purple-300" v-text="translationStatusLabel"></span>
                                 <button
                                     type="button"
                                     class="primary-button !px-5 !py-1.5 text-xs inline-flex items-center gap-1.5 bg-purple-600 hover:bg-purple-700 border-purple-600 text-white shadow-sm"
@@ -380,6 +382,10 @@
                     type: String,
                     required: true,
                 },
+                statusUrlTemplate: {
+                    type: String,
+                    required: true,
+                },
             },
 
             data() {
@@ -403,6 +409,8 @@
                     selectedTargetLang: 'th',
                     selectedPlatform: 'aeAi',
                     translatedResults: [],
+                    translationJob: null,
+                    translationPollTimer: null,
                     zoomImage: null,
                     zoomTitle: '',
                 };
@@ -439,6 +447,17 @@
                     const reg = this.candidateRegions.find(r => r.code === this.selectedRegionCode);
                     return reg ? `${reg.name} · ${reg.lang_name}` : this.selectedTargetLang;
                 },
+
+                translationStatusLabel() {
+                    const labels = {
+                        queued: '翻译任务排队中…',
+                        running: '翻译任务执行中…',
+                        completed: '翻译任务已完成',
+                        failed: '翻译任务失败',
+                    };
+
+                    return labels[this.translationJob?.status] || '';
+                },
             },
 
             mounted() {
@@ -447,6 +466,7 @@
             },
 
             beforeUnmount() {
+                clearTimeout(this.translationPollTimer);
                 this.$emitter?.off('open-image-translation-modal', this.openModal);
                 window.removeEventListener('keydown', this.handleKeydown);
             },
@@ -472,6 +492,11 @@
                                 this.existingTranslations = res.data.translations || [];
                                 if (res.data.candidate_regions) {
                                     this.candidateRegions = res.data.candidate_regions;
+                                }
+                                if (res.data.active_job) {
+                                    this.translationJob = res.data.active_job;
+                                    this.isTranslating = true;
+                                    this.pollTranslationStatus();
                                 }
                                 // Default select all images
                                 this.selectedImages = [...this.allImages];
@@ -531,6 +556,7 @@
 
                     this.isTranslating = true;
                     this.translatedResults = [];
+                    clearTimeout(this.translationPollTimer);
 
                     this.$axios.post(this.translateUrl, {
                         images: this.selectedImages,
@@ -540,9 +566,13 @@
                         platform: this.selectedPlatform,
                     })
                     .then(res => {
-                        if (res.data.success) {
-                            this.translatedResults = res.data.results || [];
-                            this.emitFlash('success', res.data.message || '图片翻译完成！');
+                        if (res.data.success && res.data.job_id) {
+                            this.translationJob = {
+                                id: res.data.job_id,
+                                status: res.data.status || 'queued',
+                            };
+                            this.emitFlash('success', res.data.message || '图片翻译任务已进入队列');
+                            this.pollTranslationStatus();
                         } else {
                             this.emitFlash('error', res.data.message || '没有图片翻译成功');
                         }
@@ -550,10 +580,39 @@
                     .catch(err => {
                         const msg = err.response?.data?.message || '图片翻译调用失败';
                         this.emitFlash('error', msg);
-                    })
-                    .finally(() => {
                         this.isTranslating = false;
                     });
+                },
+
+                pollTranslationStatus() {
+                    if (! this.translationJob?.id) return;
+
+                    clearTimeout(this.translationPollTimer);
+                    const url = this.statusUrlTemplate.replace('__JOB__', this.translationJob.id);
+
+                    this.$axios.get(url)
+                        .then(res => {
+                            const job = res.data.data;
+                            this.translationJob = job;
+
+                            if (job.status === 'completed') {
+                                this.translatedResults = job.results || [];
+                                this.isTranslating = false;
+                                this.emitFlash('success', `图片翻译完成，已生成 ${this.translatedResults.length} 张译图`);
+                                return;
+                            }
+
+                            if (job.status === 'failed') {
+                                this.isTranslating = false;
+                                this.emitFlash('error', job.error || '图片翻译任务失败');
+                                return;
+                            }
+
+                            this.translationPollTimer = setTimeout(() => this.pollTranslationStatus(), 2000);
+                        })
+                        .catch(() => {
+                            this.translationPollTimer = setTimeout(() => this.pollTranslationStatus(), 5000);
+                        });
                 },
 
                 saveTranslationResults() {

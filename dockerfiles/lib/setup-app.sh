@@ -16,6 +16,7 @@ setup_app() {
 
     if [ "${UNOPIM_SKIP_MIGRATIONS:-false}" = "true" ]; then
         echo "→ UNOPIM_SKIP_MIGRATIONS=true — schema is managed outside the container."
+        php artisan unopim:schema:check --no-interaction || return 1
         touch "$lock_file"
 
         return 0
@@ -29,6 +30,8 @@ setup_app() {
         php artisan migrate --force --no-interaction
         php artisan db:seed --force --no-interaction
     fi
+
+    php artisan unopim:schema:check --no-interaction || return 1
 
     php artisan storage:link --relative --no-interaction >/dev/null 2>&1 || true
 

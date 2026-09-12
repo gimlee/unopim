@@ -2218,19 +2218,18 @@ class ProductController extends Controller
     {
         abort_unless(bouncer()->hasPermission('catalog.products.edit'), 403);
 
-        @set_time_limit(300);
-        @ini_set('max_execution_time', '300');
-
         $product = $this->productRepository->findOrFail($id);
         $rootProduct = $product->parent ?: $product;
 
-        $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+        $pimUrl = rtrim(config('services.product_info_management.base_url'), '/');
         $region = request()->input('region', 'MY');
         $action = request()->input('action', 'draft');
         $isSubmit = ($action === 'submit') || request()->boolean('submit_for_review');
 
         try {
-            $response = Http::timeout(300)->post("{$pimUrl}/api/products/{$rootProduct->sku}/listing/run", [
+            $response = Http::connectTimeout(config('services.product_info_management.connect_timeout'))
+                ->timeout(config('services.product_info_management.acceptance_timeout'))
+                ->post("{$pimUrl}/api/products/{$rootProduct->sku}/listing/run", [
                 'region'                  => $region,
                 'save'                    => true,
                 'accept_auto_translation' => true,
@@ -2278,12 +2277,14 @@ class ProductController extends Controller
 
         $product = $this->productRepository->findOrFail($id);
         $rootProduct = $product->parent ?: $product;
-        $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+        $pimUrl = rtrim(config('services.product_info_management.base_url'), '/');
         $region = request()->query('region');
         $queryParam = $region ? '?region=' . urlencode(strtoupper((string) $region)) : '';
 
         try {
-            $response = Http::timeout(15)->get("{$pimUrl}/api/products/{$rootProduct->sku}/listing/status{$queryParam}");
+            $response = Http::connectTimeout(config('services.product_info_management.connect_timeout'))
+                ->timeout(config('services.product_info_management.acceptance_timeout'))
+                ->get("{$pimUrl}/api/products/{$rootProduct->sku}/listing/status{$queryParam}");
 
             if (! $response->successful()) {
                 $errorData = $response->json();
@@ -2319,7 +2320,7 @@ class ProductController extends Controller
         $product = $this->productRepository->findOrFail($id);
         $rootProduct = $product->parent ?: $product;
         $region = request()->input('region');
-        $pimUrl = rtrim(config('services.pim.url', env('PIM_API_URL', 'http://127.0.0.1:8020')), '/');
+        $pimUrl = rtrim(config('services.product_info_management.base_url'), '/');
 
         try {
             $payload = [];
@@ -2327,7 +2328,9 @@ class ProductController extends Controller
                 $payload['region'] = strtoupper((string) $region);
             }
 
-            $response = Http::timeout(15)->post("{$pimUrl}/api/products/{$rootProduct->sku}/listing/cancel", $payload);
+            $response = Http::connectTimeout(config('services.product_info_management.connect_timeout'))
+                ->timeout(config('services.product_info_management.acceptance_timeout'))
+                ->post("{$pimUrl}/api/products/{$rootProduct->sku}/listing/cancel", $payload);
 
             if (! $response->successful()) {
                 $errorData = $response->json();

@@ -140,20 +140,6 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                     ->where('primary_category_assignment.status', '=', 'confirmed');
             })
             ->leftJoin('categories as primary_category_record', 'primary_category_record.id', '=', 'primary_category_assignment.category_id')
-            ->leftJoin('product_listing_histories as latest_listing_history', function ($join) use ($tablePrefix) {
-                $join->on('latest_listing_history.product_id', '=', 'products.id')
-                    ->whereRaw("{$tablePrefix}latest_listing_history.id = (
-                        SELECT {$tablePrefix}listing_history_rank.id
-                        FROM {$tablePrefix}product_listing_histories AS {$tablePrefix}listing_history_rank
-                        WHERE {$tablePrefix}listing_history_rank.product_id = {$tablePrefix}products.id
-                        ORDER BY COALESCE(
-                            {$tablePrefix}listing_history_rank.completed_at,
-                            {$tablePrefix}listing_history_rank.started_at,
-                            {$tablePrefix}listing_history_rank.created_at
-                        ) DESC, {$tablePrefix}listing_history_rank.id DESC
-                        LIMIT 1
-                    )");
-            })
             ->select(
                 'products.sku',
                 'products.id as product_id',
@@ -175,11 +161,6 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                 'products.avg_completeness_score as completeness',
                 'primary_category_record.source_path as primary_category',
                 'primary_category_assignment.method as taxonomy_method',
-                'latest_listing_history.id as latest_listing_history_id',
-                'latest_listing_history.platform as latest_listing_platform',
-                'latest_listing_history.region as latest_listing_region',
-                'latest_listing_history.listing_type as latest_listing_type',
-                'latest_listing_history.status as latest_listing_status',
             );
 
         return $queryBuilder;
@@ -1202,6 +1183,8 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
 
         $mergedValuesByProductId = $this->resolveMergedValuesForPage($paginator['data']);
 
+        $this->hydrateLatestListingHistories($paginator['data']);
+
         foreach ($paginator['data'] as $record) {
             $record = $this->sanitizeRow($record);
 
@@ -1263,6 +1246,53 @@ class ProductDataGrid extends DataGrid implements ExportableInterface
                 ],
             ],
         ];
+    }
+
+    /**
+     * Decorate the current page with one latest listing-history query.
+     *
+     * Keeping this relation out of the paginated base query prevents its
+     * correlated latest-row lookup from running for every candidate product.
+     */
+    protected function hydrateLatestListingHistories(iterable $records): void
+    {
+        $records = collect($records);
+        $productIds = $records->pluck('product_id')->filter()->unique()->values();
+
+        if ($productIds->isEmpty()) {
+            return;
+        }
+
+        $rankedHistories = DB::table('product_listing_histories')
+            ->select([
+                'id',
+                'product_id',
+                'platform',
+                'region',
+                'listing_type',
+                'status',
+            ])
+            ->selectRaw('ROW_NUMBER() OVER (
+                PARTITION BY product_id
+                ORDER BY COALESCE(completed_at, started_at, created_at) DESC, id DESC
+            ) AS listing_rank')
+            ->whereIn('product_id', $productIds);
+
+        $latestByProductId = DB::query()
+            ->fromSub($rankedHistories, 'ranked_listing_histories')
+            ->where('listing_rank', 1)
+            ->get()
+            ->keyBy('product_id');
+
+        foreach ($records as $record) {
+            $history = $latestByProductId->get($record->product_id);
+
+            $record->latest_listing_history_id = $history?->id;
+            $record->latest_listing_platform = $history?->platform;
+            $record->latest_listing_region = $history?->region;
+            $record->latest_listing_type = $history?->listing_type;
+            $record->latest_listing_status = $history?->status;
+        }
     }
 
     /**

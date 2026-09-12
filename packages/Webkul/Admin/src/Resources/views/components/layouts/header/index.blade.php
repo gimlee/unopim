@@ -279,21 +279,56 @@
                         totalUnRead: 0,
 
                         pollTimer: null,
+
+                        notificationInFlight: false,
+
+                        notificationFailures: 0,
+
+                        notificationUnmounted: false,
                     }
                 },
 
                 mounted() {
+                    this.notificationVisibilityHandler = this.handleNotificationVisibility;
+                    document.addEventListener('visibilitychange', this.notificationVisibilityHandler);
                     this.getNotification();
-                    this.pollTimer = setInterval(this.getNotification, 15000);
                 },
 
                 beforeUnmount() {
-                    clearInterval(this.pollTimer);
+                    this.notificationUnmounted = true;
+                    clearTimeout(this.pollTimer);
+                    document.removeEventListener('visibilitychange', this.notificationVisibilityHandler);
                 },
 
                 methods: {
+                    scheduleNotificationPoll() {
+                        clearTimeout(this.pollTimer);
+
+                        if (this.notificationUnmounted || document.hidden) {
+                            return;
+                        }
+
+                        const delay = Math.min(120000, 15000 * Math.pow(2, this.notificationFailures));
+
+                        this.pollTimer = setTimeout(() => this.getNotification(), delay);
+                    },
+
+                    handleNotificationVisibility() {
+                        clearTimeout(this.pollTimer);
+
+                        if (! document.hidden) {
+                            this.getNotification();
+                        }
+                    },
+
                     getNotification() {
-                        this.$axios.get('{{ route('admin.notification.get_notification') }}', {
+                        if (this.notificationInFlight || document.hidden || this.notificationUnmounted) {
+                            return;
+                        }
+
+                        this.notificationInFlight = true;
+
+                        return this.$axios.get('{{ route('admin.notification.get_notification') }}', {
                                 params: {
                                     limit: 5
                                 }
@@ -302,8 +337,16 @@
                                 this.userNotifications = response.data.search_results.data;
 
                                 this.totalUnRead =   response.data.total_unread;
+
+                                this.notificationFailures = 0;
                             })
-                            .catch(error => console.log(error))
+                            .catch(() => {
+                                this.notificationFailures = Math.min(this.notificationFailures + 1, 3);
+                            })
+                            .finally(() => {
+                                this.notificationInFlight = false;
+                                this.scheduleNotificationPoll();
+                            });
                     },
 
                     readAll() {

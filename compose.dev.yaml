@@ -12,6 +12,7 @@
 #   unopim-nginx        — Nginx reverse proxy (serves static files, proxies PHP)
 #   unopim-fpm          — PHP 8.3 FPM (application server)
 #   unopim-q            — Queue worker (system, completeness, default)
+#   unopim-image-translations — Isolated image translation worker
 #   unopim-scheduler    — Laravel scheduler (cron replacement)
 #   unopim-pgsql        — PostgreSQL 16 (profile: pgsql, default)
 #   unopim-mysql        — MySQL 8.0 (profile: mysql)
@@ -139,6 +140,34 @@ services:
     environment:
       <<: *app-environment
       QUEUE_NAMES: "webhooks,system,completeness,default,publication"
+    depends_on:
+      <<: *app-depends
+      unopim-fpm:
+        condition: service_healthy
+    logging: *default-logging
+
+  # ---------------------------------------------------------------------------
+  # Image translation worker (isolated from system/default queues)
+  # ---------------------------------------------------------------------------
+  unopim-image-translations:
+    build:
+      context: .
+      dockerfile: dockerfiles/q.Dockerfile
+      args:
+        HOST_UID: "${HOST_UID:-33}"
+        HOST_GID: "${HOST_GID:-33}"
+    volumes:
+      - .:/var/www/html
+      - ./dockerfiles/php-dev.ini:/usr/local/etc/php/conf.d/zz-unopim-dev.ini:ro
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      <<: *app-environment
+      QUEUE_NAMES: "image-translations"
+      QUEUE_TIMEOUT: "300"
+      QUEUE_TRIES: "2"
+      QUEUE_MAX_JOBS: "100"
+      QUEUE_MAX_TIME: "3600"
     depends_on:
       <<: *app-depends
       unopim-fpm:

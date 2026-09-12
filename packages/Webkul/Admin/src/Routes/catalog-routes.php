@@ -274,6 +274,7 @@ Route::group(['middleware' => ['admin'], 'prefix' => config('app.admin_url')], f
         Route::controller(ProductImageTranslationController::class)->prefix('products/{id}/image-translations')->group(function () {
             Route::get('', 'index')->name('admin.catalog.products.image_translations.index');
             Route::post('translate', 'translate')->name('admin.catalog.products.image_translations.translate');
+            Route::get('jobs/{jobId}', 'status')->whereUuid('jobId')->name('admin.catalog.products.image_translations.status');
             Route::post('save', 'save')->name('admin.catalog.products.image_translations.save');
             Route::delete('{translationId}', 'destroy')->name('admin.catalog.products.image_translations.destroy');
         });

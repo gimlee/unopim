@@ -269,10 +269,7 @@ class Collection1688Controller extends Controller
     protected function getPimUrl(): string
     {
         return rtrim(
-            config('services.product_info_management.base_url')
-            ?: config('services.pim.url')
-            ?: env('PRODUCT_INFO_MANAGEMENT_BASE_URL')
-            ?: env('PIM_API_URL', 'http://127.0.0.1:8020'),
+            config('services.product_info_management.base_url'),
             '/'
         );
     }

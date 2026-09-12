@@ -52,9 +52,12 @@ return [
     ],
 
     'product_info_management' => [
-        'base_url' => env('PRODUCT_INFO_MANAGEMENT_BASE_URL', 'http://127.0.0.1:8020'),
-        'api_token' => env('PRODUCT_INFO_MANAGEMENT_API_TOKEN'),
-        'timeout' => (int) env('PRODUCT_INFO_MANAGEMENT_TIMEOUT', 300),
+        'base_url'           => env('PRODUCT_INFO_MANAGEMENT_BASE_URL', env('PIM_API_URL', 'http://127.0.0.1:8020')),
+        'api_token'          => env('PRODUCT_INFO_MANAGEMENT_API_TOKEN'),
+        'connect_timeout'    => (int) env('PRODUCT_INFO_MANAGEMENT_CONNECT_TIMEOUT', 3),
+        'acceptance_timeout' => (int) env('PRODUCT_INFO_MANAGEMENT_ACCEPTANCE_TIMEOUT', 10),
+        'worker_timeout'     => (int) env('PRODUCT_INFO_MANAGEMENT_WORKER_TIMEOUT', 120),
+        'download_timeout'   => (int) env('PRODUCT_INFO_MANAGEMENT_DOWNLOAD_TIMEOUT', 30),
 
         // Credentials accepted by this UnoPIM service from the PIM pipeline.
         'unopim_client' => [

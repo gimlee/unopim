@@ -25,6 +25,20 @@ function insertListingHistory(Product $product, array $overrides = []): int
     ], $overrides));
 }
 
+function listingGridRecords(array $productIds): array
+{
+    request()->replace([
+        'managedColumns' => ['product_id', 'sku', 'latest_listing_result'],
+        'productIds'     => $productIds,
+        'sort'           => ['column' => 'sku', 'order' => 'asc'],
+    ]);
+
+    $grid = app(ProductDataGrid::class);
+    $grid->prepare();
+
+    return json_decode(json_encode($grid->formatData()['records']), true);
+}
+
 it('shows and refreshes listing history in newest-first order', function () {
     $this->loginAsAdmin();
     $product = Product::factory()->configurable()->create(['sku' => 'LISTING-DRAWER-'.uniqid()]);
@@ -75,24 +89,44 @@ it('renders only the latest listing result without duplicating the product grid 
         'completed_at' => now(),
     ]);
 
-    $grid = app(ProductDataGrid::class);
-    $rows = $grid->prepareQueryBuilder()->where('products.id', $product->id)->get();
-    $column = $grid->getPropertyColumns()['latest_listing_result'];
+    $rows = listingGridRecords([$product->id]);
 
     expect($rows)->toHaveCount(1)
-        ->and($rows->first()->latest_listing_region)->toBe('TH')
-        ->and($rows->first()->latest_listing_type)->toBe('review')
-        ->and($rows->first()->latest_listing_status)->toBe('submitted')
-        ->and($column['closure']($rows->first()))->toContain('TH')
+        ->and($rows[0]['latest_listing_result'])->toContain('TH')
         ->toContain('审核 · 已提交');
 });
 
 it('shows an empty latest-listing state when a product has no history', function () {
     $this->loginAsAdmin();
     $product = Product::factory()->configurable()->create(['sku' => 'LISTING-GRID-EMPTY-'.uniqid()]);
-    $grid = app(ProductDataGrid::class);
-    $row = $grid->prepareQueryBuilder()->where('products.id', $product->id)->first();
-    $column = $grid->getPropertyColumns()['latest_listing_result'];
+    $rows = listingGridRecords([$product->id]);
 
-    expect($column['closure']($row))->toContain('暂无上架');
+    expect($rows)->toHaveCount(1)
+        ->and($rows[0]['latest_listing_result'])->toContain('暂无上架');
+});
+
+it('loads latest listing results once for the current page without duplicating rows', function () {
+    $this->loginAsAdmin();
+
+    $products = collect(range(1, 4))->map(fn ($index) => Product::factory()->configurable()->create([
+        'sku' => 'LISTING-BATCH-'.$index.'-'.uniqid(),
+    ]));
+
+    foreach ($products as $product) {
+        insertListingHistory($product, ['completed_at' => now()->subMinute()]);
+        insertListingHistory($product, ['region' => 'SG', 'status' => 'submitted']);
+    }
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $rows = listingGridRecords($products->pluck('id')->reverse()->all());
+    $queries = collect(DB::getQueryLog());
+    DB::disableQueryLog();
+
+    $historyQueries = $queries->filter(fn ($entry) => str_contains($entry['query'], 'product_listing_histories'));
+
+    expect($rows)->toHaveCount(4)
+        ->and(collect($rows)->pluck('product_id')->sort()->values()->all())->toBe($products->pluck('id')->sort()->values()->all())
+        ->and(collect($rows)->every(fn ($row) => str_contains($row['latest_listing_result'], 'SG')))->toBeTrue()
+        ->and($historyQueries)->toHaveCount(1);
 });

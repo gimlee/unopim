@@ -107,13 +107,15 @@
                                 <img
                                     v-else-if="column.type === 'image'"
                                     :src="record[column.index] || '{{ unopim_asset('images/placeholder.svg') }}'"
+                                    loading="lazy"
+                                    decoding="async"
                                     alt="@lang('admin::app.components.datagrid.table.thumbnail')"
                                     class="h-[60px] w-[60px] rounded-lg border border-gray-300 object-cover shadow-sm"
                                 >
 
                                 <template v-else-if="column.type === 'gallery'">
                                     <video v-if="record[column.index]?.type === 'video'" :src="record[column.index].url" class="h-[60px] w-[60px] rounded-lg border border-gray-300 object-cover shadow-sm"></video>
-                                    <img v-else :src="record[column.index]?.url || '{{ unopim_asset('images/placeholder.svg') }}'" class="h-[60px] w-[60px] rounded-lg border border-gray-300 object-cover shadow-sm" alt="">
+                                    <img v-else :src="record[column.index]?.url || '{{ unopim_asset('images/placeholder.svg') }}'" loading="lazy" decoding="async" class="h-[60px] w-[60px] rounded-lg border border-gray-300 object-cover shadow-sm" alt="">
                                 </template>
 
                                 <p v-else-if="column.closure" class="truncate" :title="stripHtml(record[column.index])" v-html="record[column.index]"></p>
@@ -153,7 +155,7 @@
                                     </thead>
                                     <tbody>
                                         <tr v-for="variation in variations[record.product_id]" :key="variation.id" class="border-t dark:border-cherry-800">
-                                            <td class="px-3 py-2"><img :src="variation.image || '{{ unopim_asset('images/placeholder.svg') }}'" class="h-11 w-11 rounded border object-cover" alt=""></td>
+                                            <td class="px-3 py-2"><img :src="variation.image || '{{ unopim_asset('images/placeholder.svg') }}'" loading="lazy" decoding="async" class="h-11 w-11 rounded border object-cover" alt=""></td>
                                             <td class="max-w-[300px] pr-3">
                                                 <div class="flex min-w-0 items-center gap-1.5">
                                                     <a class="truncate font-medium text-blue-600" :href="variation.redirect_url" v-text="variation.sku"></a>
